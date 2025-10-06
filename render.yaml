@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: trainplan-bot
+    env: node
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: BOT_TOKEN
+        value: 8285829471:AAGehHp9CC1r6j1F7UArlcwUPG6Rex2RGMo
