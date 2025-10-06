@@ -1,0 +1,25 @@
+{
+  "name": "trainplan-backend",
+  "version": "1.0.0",
+  "description": "Backend для Telegram бота TrainPlan",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "tunnel": "localtonet --port 3000 --key fCixSmZVWpB6TPKYb8GDelsqyREuo2Nhw",
+    "start-with-tunnel": "node server.js & localtonet --port 3000 --key fCixSmZVWpB6TPKYb8GDelsqyREuo2Nhw",
+    "install-deps": "npm install express cors telegraf crypto node-schedule sqlite3",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["telegram", "bot", "fitness", "training"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "node-schedule": "^2.1.1",
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7",
+    "telegraf": "^4.16.3"
+  }
+}
