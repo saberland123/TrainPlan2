@@ -24,25 +24,46 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('theme-toggle').checked = savedTheme === 'light';
     }
 
-    // Показать уведомление
+    // Улучшенная функция уведомлений
     function showNotification(message, type = 'success') {
         // Удаляем старые уведомления
-        document.querySelectorAll('.notification').forEach(notif => notif.remove());
-        
+        const oldNotifications = document.querySelectorAll('.notification');
+        oldNotifications.forEach(notif => {
+            notif.style.opacity = '0';
+            setTimeout(() => notif.remove(), 300);
+        });
+
         const notification = document.createElement('div');
         notification.className = `notification ${type}`;
         notification.textContent = message;
+        notification.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: ${type === 'error' ? '#f44336' : '#4CAF50'};
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 10000;
+            max-width: 300px;
+            word-wrap: break-word;
+            opacity: 0;
+            transform: translateX(100%);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        `;
+        
         document.body.appendChild(notification);
 
         // Анимация появления
-        setTimeout(() => {
+        requestAnimationFrame(() => {
             notification.style.opacity = '1';
-            notification.style.transform = 'translateY(0)';
-        }, 10);
+            notification.style.transform = 'translateX(0)';
+        });
 
         setTimeout(() => {
             notification.style.opacity = '0';
-            notification.style.transform = 'translateY(-20px)';
+            notification.style.transform = 'translateX(100%)';
             setTimeout(() => {
                 if (notification.parentNode) {
                     notification.remove();
@@ -62,17 +83,20 @@ document.addEventListener('DOMContentLoaded', () => {
     // Модальные окна - исправленная версия без лагов
     function openModal(modalElement) {
         modalElement.style.display = 'flex';
-        document.body.style.overflow = 'hidden'; // Блокируем скролл
+        modalElement.style.opacity = '0';
         
         // Принудительный reflow
         modalElement.offsetHeight;
         
-        modalElement.classList.add('active');
+        requestAnimationFrame(() => {
+            modalElement.style.opacity = '1';
+            modalElement.classList.add('active');
+        });
     }
 
     function closeModal(modalElement) {
+        modalElement.style.opacity = '0';
         modalElement.classList.remove('active');
-        document.body.style.overflow = ''; // Разблокируем скролл
         
         setTimeout(() => {
             if (!modalElement.classList.contains('active')) {
@@ -140,7 +164,7 @@ document.addEventListener('DOMContentLoaded', () => {
         button.addEventListener('click', () => showScreen('home-screen'));
     });
 
-    // Загрузка базового плана - исправленная версия
+    // Улучшенная функция загрузки базового плана
     document.getElementById('load-default-plan').addEventListener('click', async () => {
         try {
             showNotification('Загружаем базовый план...', 'success');
@@ -221,7 +245,7 @@ document.addEventListener('DOMContentLoaded', () => {
         event.target.classList.add('active');
     }
 
-    // Создание группы с автокопированием кода - исправленная версия
+    // Улучшенная функция создания группы
     document.getElementById('create-group-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         
@@ -562,7 +586,7 @@ document.addEventListener('DOMContentLoaded', () => {
         savePlan();
     };
 
-    // Сохранение плана - исправленная версия
+    // Улучшенная функция сохранения плана
     async function savePlan() {
         try {
             console.log('Saving plan:', appData.plan);
