@@ -23,7 +23,7 @@
                 <p>Создай свой идеальный план тренировок и получай умные напоминания</p>
             </div>
 
-            <!-- ОБНОВЛЕННОЕ МЕНЮ - ТОЛЬКО ОСНОВНЫЕ КНОПКИ -->
+            <!-- Основное меню -->
             <div class="menu-grid">
                 <button id="menu-plan-btn" class="menu-button">
                     <span>📅 Мой план</span>
@@ -39,7 +39,7 @@
                 </button>
             </div>
 
-            <!-- ДОПОЛНИТЕЛЬНЫЕ КНОПКИ ОТДЕЛЬНО -->
+            <!-- Дополнительные кнопки -->
             <div class="action-buttons">
                 <button id="load-default-plan" class="btn-secondary">
                     📋 Загрузить базовый план
@@ -47,18 +47,6 @@
                 <button id="menu-settings-btn" class="btn-secondary">
                     ⚙️ Настройки
                 </button>
-            </div>
-
-            <!-- ЛИЧНАЯ СТАТИСТИКА -->
-            <div class="quick-stats">
-                <div class="stat-card">
-                    <div class="stat-number" id="stat-days">0</div>
-                    <div class="stat-label">Дней на этой неделе</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number" id="stat-weeks">0</div>
-                    <div class="stat-label">Завершено недель</div>
-                </div>
             </div>
         </div>
     </div>
@@ -72,9 +60,7 @@
                 <div class="week-info" id="week-info"></div>
             </div>
             
-            <div class="week-plan" id="week-plan-container">
-                <!-- Динамически генерируемые карточки дней -->
-            </div>
+            <div class="week-plan" id="week-plan-container"></div>
         </div>
     </div>
 
@@ -92,36 +78,39 @@
                 <button class="tab-btn" onclick="switchGroupTab('create-group')">Создать</button>
             </div>
             
-            <!-- Мои группы -->
             <div id="my-groups-tab" class="tab-content active">
-                <div id="groups-list-container">
-                    <!-- Группы загружаются динамически -->
-                </div>
+                <div id="groups-list-container"></div>
             </div>
             
-            <!-- Присоединиться к группе -->
             <div id="join-group-tab" class="tab-content">
                 <div class="welcome-card">
                     <h3>Присоединиться к группе</h3>
-                    <p>Введите пригласительный код, который вам отправили:</p>
+                    <p>Введите пригласительный код:</p>
                     <form id="join-group-form" class="group-form">
-                        <input type="text" id="invite-code" placeholder="Например: A1B2C3D4" required>
+                        <div class="form-group">
+                            <input type="text" id="invite-code" placeholder="Например: A1B2C3D4" required>
+                        </div>
                         <button type="submit" class="btn-primary">Присоединиться</button>
                     </form>
                 </div>
             </div>
             
-            <!-- Создание группы -->
             <div id="create-group-tab" class="tab-content">
                 <div class="welcome-card">
                     <h3>Создать новую группу</h3>
                     <form id="create-group-form" class="group-form">
-                        <input type="text" id="group-name" placeholder="Название группы" required>
-                        <textarea id="group-description" placeholder="Описание группы (необязательно)"></textarea>
-                        <select id="group-plan-type">
-                            <option value="week">Недельный план</option>
-                            <option value="month">Месячный план</option>
-                        </select>
+                        <div class="form-group">
+                            <input type="text" id="group-name" placeholder="Название группы" required>
+                        </div>
+                        <div class="form-group">
+                            <textarea id="group-description" placeholder="Описание группы (необязательно)"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <select id="group-plan-type">
+                                <option value="week">Недельный план</option>
+                                <option value="month">Месячный план</option>
+                            </select>
+                        </div>
                         <button type="submit" class="btn-primary">Создать группу</button>
                     </form>
                 </div>
@@ -136,10 +125,7 @@
                 <button class="back-button">← Назад</button>
                 <h2 id="group-detail-title">Группа</h2>
             </div>
-            
-            <div id="group-detail-container">
-                <!-- Детали группы загружаются динамически -->
-            </div>
+            <div id="group-detail-container"></div>
         </div>
     </div>
 
@@ -150,15 +136,7 @@
                 <button class="back-button">← Назад</button>
                 <h2>🏆 Таблица лидеров</h2>
             </div>
-            
-            <div class="leaderboard-info">
-                <p>Рейтинг основан на количестве завершенных тренировочных дней</p>
-                <small>Минимум: 2 подхода × 5+ повторений</small>
-            </div>
-            
-            <div id="leaderboard-container" class="leaderboard-list">
-                <!-- Лидеры загружаются динамически -->
-            </div>
+            <div id="leaderboard-container" class="leaderboard-list"></div>
         </div>
     </div>
 
@@ -170,38 +148,28 @@
                 <h2>📊 Моя статистика</h2>
             </div>
             
-            <div class="analytics-grid">
-                <div class="stat-card large">
-                    <div class="stat-number" id="total-workout-days">0</div>
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number" id="stat-days-analytics">0</div>
+                    <div class="stat-label">Дней на этой неделе</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="stat-weeks-analytics">0</div>
+                    <div class="stat-label">Завершено недель</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="stat-total-analytics">0</div>
                     <div class="stat-label">Всего тренировок</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-number" id="current-streak">0</div>
+                    <div class="stat-number" id="stat-streak-analytics">0</div>
                     <div class="stat-label">Текущий стрик</div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-number" id="longest-streak">0</div>
+                <div class="stat-card large">
+                    <div class="stat-number" id="stat-best-streak">0</div>
                     <div class="stat-label">Лучший стрик</div>
                 </div>
             </div>
-            
-            <div class="analytics-section">
-                <h3>📈 Топ упражнений</h3>
-                <div id="top-exercises" class="exercises-stats">
-                    <!-- Статистика упражнений -->
-                </div>
-            </div>
-            
-            <div class="analytics-section">
-                <h3>🔄 Активность по неделям</h3>
-                <div id="weekly-chart" class="chart-container">
-                    <!-- График активности -->
-                </div>
-            </div>
-            
-            <button class="btn-primary" onclick="shareResults()">
-                📤 Поделиться результатами
-            </button>
         </div>
     </div>
 
@@ -214,7 +182,6 @@
             </div>
             
             <div class="modal-body">
-                <!-- Переключатель выходного дня -->
                 <div class="rest-day-toggle-section">
                     <label class="toggle-label">
                         <input type="checkbox" id="rest-day-toggle">
@@ -223,48 +190,35 @@
                     </label>
                 </div>
 
-                <!-- Настройки уведомлений -->
                 <div id="notification-settings" class="settings-section">
                     <h4>🔔 Настройки уведомлений</h4>
-                    <div class="setting-row">
-                        <label>Время начала:</label>
+                    <div class="form-group">
+                        <label>Время уведомления:</label>
                         <input type="time" id="notification-time" value="19:00">
                     </div>
-                    <div class="setting-row">
-                        <label>Интервал (мин):</label>
-                        <select id="notification-interval">
-                            <option value="5">5 минут</option>
-                            <option value="10" selected>10 минут</option>
-                            <option value="15">15 минут</option>
-                            <option value="30">30 минут</option>
-                        </select>
-                    </div>
-                    <div class="setting-row">
-                        <label>Отдых между подходами (сек):</label>
-                        <input type="number" id="rest-between-sets" value="60" min="10" max="300">
-                    </div>
-                    <div class="setting-row">
-                        <label>Отдых после упражнения (сек):</label>
-                        <input type="number" id="rest-after-exercise" value="60" min="10" max="300">
-                    </div>
-                    <button id="save-notification-settings" class="btn-primary">Сохранить настройки</button>
+                    <button id="save-notification-settings" class="btn-primary">Сохранить время</button>
                 </div>
 
-                <!-- Список упражнений -->
                 <div class="exercises-section">
                     <h4>Упражнения</h4>
-                    <div id="exercises-list" class="exercises-list">
-                        <!-- Динамически генерируемые упражнения -->
-                    </div>
+                    <div id="exercises-list" class="exercises-list"></div>
                 </div>
 
-                <!-- Форма добавления упражнения -->
                 <form id="add-exercise-form" class="add-exercise-form">
                     <h4>Добавить упражнение</h4>
-                    <input type="text" id="ex-name" placeholder="Название упражнения" required>
-                    <input type="number" id="ex-sets" placeholder="Кол-во подходов" min="1" required>
-                    <input type="text" id="ex-reps" placeholder="Повторения (например: 10 или 30 сек)" required>
-                    <button type="submit" class="btn-primary">Добавить</button>
+                    <div class="form-group">
+                        <label for="ex-name">Название упражнения</label>
+                        <input type="text" id="ex-name" placeholder="Например: Отжимания" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="ex-sets">Количество подходов</label>
+                        <input type="number" id="ex-sets" placeholder="3" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="ex-reps">Повторения или время</label>
+                        <input type="text" id="ex-reps" placeholder="10 или 30 секунд" required>
+                    </div>
+                    <button type="submit" class="btn-primary">Добавить упражнение</button>
                 </form>
             </div>
         </div>
@@ -279,20 +233,27 @@
             </div>
             
             <div class="modal-body">
-                <div class="settings-section">
+                <div class="settings-grid">
                     <div class="setting-item">
-                        <label>
-                            <input type="checkbox" id="global-notifications" checked>
-                            Включить уведомления
+                        <span>🌙 Светлая тема</span>
+                        <label class="toggle-label">
+                            <input type="checkbox" id="theme-toggle">
+                            <span class="toggle-slider"></span>
                         </label>
                     </div>
                     <div class="setting-item">
-                        <label>
-                            <input type="checkbox" id="sound-enabled" checked>
-                            Звуковые уведомления
-                        </label>
+                        <span>🌍 Часовой пояс</span>
+                        <select id="timezone-select">
+                            <option value="Europe/Moscow">Москва (+3)</option>
+                            <option value="Europe/London">Лондон (+0)</option>
+                            <option value="America/New_York">Нью-Йорк (-5)</option>
+                            <option value="Asia/Tokyo">Токио (+9)</option>
+                            <option value="Australia/Sydney">Сидней (+10)</option>
+                            <option value="Europe/Paris">Париж (+1)</option>
+                            <option value="Asia/Dubai">Дубай (+4)</option>
+                            <option value="America/Los_Angeles">Лос-Анджелес (-8)</option>
+                        </select>
                     </div>
-                    <button id="save-global-settings" class="btn-primary">Сохранить настройки</button>
                 </div>
             </div>
         </div>
