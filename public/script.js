@@ -1,150 +1,345 @@
 document.addEventListener('DOMContentLoaded', () => {
     const tg = window.Telegram.WebApp;
     tg.expand();
+    tg.enableClosingConfirmation();
 
-    const BACKEND_URL = '';
+    const BACKEND_URL = 'https://trainplan2-1.onrender.com';
 
     let appData = {
         plan: [],
-        profile: {},
-        settings: {}
+        weekDates: [],
+        weekNumber: 0,
+        stats: {}
     };
     let currentEditingDayIndex = null;
     const dayNames = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресенье"];
+    const monthNames = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
 
-    // --- ЭЛЕМЕНТЫ СТРАНИЦЫ ---
+    // Элементы страницы
     const screens = document.querySelectorAll('.screen');
     const modal = document.getElementById('day-modal');
     const settingsModal = document.getElementById('settings-modal');
     
-    // --- НАВИГАЦИЯ ---
-    function showScreen(screenId) {
-        screens.forEach(screen => {
-            screen.classList.remove('active');
-        });
-        document.getElementById(screenId).classList.add('active');
+    // Анимации
+    function animateElement(element, animation) {
+        element.style.animation = 'none';
+        setTimeout(() => {
+            element.style.animation = `${animation} 0.5s ease-out`;
+        }, 10);
     }
 
+    function showScreen(screenId) {
+        // Анимация перехода между экранами
+        screens.forEach(screen => {
+            if (screen.classList.contains('active')) {
+                screen.style.animation = 'fadeOut 0.3s ease-out';
+                setTimeout(() => {
+                    screen.classList.remove('active');
+                }, 250);
+            }
+        });
+
+        setTimeout(() => {
+            const targetScreen = document.getElementById(screenId);
+            targetScreen.classList.add('active');
+            animateElement(targetScreen, 'fadeIn');
+            
+            // Вибрация для обратной связи
+            tg.HapticFeedback.impactOccurred('soft');
+        }, 300);
+    }
+
+    function openModal(modalElement) {
+        modalElement.style.display = 'flex';
+        setTimeout(() => {
+            modalElement.classList.add('active');
+            animateElement(modalElement.querySelector('.modal-content'), 'scaleIn');
+            tg.HapticFeedback.impactOccurred('light');
+        }, 10);
+    }
+
+    function closeModal(modalElement) {
+        modalElement.classList.remove('active');
+        animateElement(modalElement.querySelector('.modal-content'), 'fadeOut');
+        setTimeout(() => {
+            modalElement.style.display = 'none';
+        }, 300);
+        tg.HapticFeedback.impactOccurred('light');
+    }
+
+    // Навигация
     document.getElementById('menu-plan-btn').addEventListener('click', () => {
         renderWeekPlan();
         showScreen('plan-screen');
     });
 
     document.getElementById('menu-profile-btn').addEventListener('click', () => {
-        renderProfile();
+        loadStats();
         showScreen('profile-screen');
     });
 
-    document.getElementById('menu-settings-btn').addEventListener('click', () => {
-        openSettingsModal();
-    });
-
+    document.getElementById('menu-settings-btn').addEventListener('click', () => openModal(settingsModal));
+    
     document.querySelectorAll('.back-button').forEach(button => {
         button.addEventListener('click', () => showScreen('home-screen'));
     });
 
-    // --- РЕНДЕРИНГ ---
+    // Форматирование даты
+    function formatDate(dateString) {
+        const date = new Date(dateString);
+        const today = new Date();
+        const tomorrow = new Date(today);
+        tomorrow.setDate(today.getDate() + 1);
+
+        if (date.toDateString() === today.toDateString()) {
+            return 'Сегодня';
+        }
+        if (date.toDateString() === tomorrow.toDateString()) {
+            return 'Завтра';
+        }
+
+        return `${date.getDate()} ${monthNames[date.getMonth()]}`;
+    }
+
+    function formatWeekRange(weekDates) {
+        if (!weekDates || weekDates.length === 0) return '';
+        
+        const start = new Date(weekDates[0]);
+        const end = new Date(weekDates[6]);
+        
+        if (start.getMonth() === end.getMonth()) {
+            return `${start.getDate()}-${end.getDate()} ${monthNames[start.getMonth()]}`;
+        } else {
+            return `${start.getDate()} ${monthNames[start.getMonth()]} - ${end.getDate()} ${monthNames[end.getMonth()]}`;
+        }
+    }
+
+    // Загрузка базового плана
+    document.getElementById('load-default-plan').addEventListener('click', async () => {
+        if (confirm('Загрузить базовый план тренировок? Это перезапишет текущий план.')) {
+            try {
+                tg.showPopup({
+                    title: 'Загрузка',
+                    message: 'Загружаем базовый план...',
+                    buttons: []
+                });
+
+                const response = await fetch('/api/load-default-plan', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `tma ${tg.initData}`
+                    }
+                });
+
+                if (response.ok) {
+                    await loadPlan();
+                    tg.showPopup({
+                        title: 'Успех!',
+                        message: 'Базовый план загружен!',
+                        buttons: [{ type: 'ok' }]
+                    });
+                    tg.HapticFeedback.notificationOccurred('success');
+                }
+            } catch (error) {
+                console.error(error);
+                tg.showAlert('Ошибка при загрузке плана');
+                tg.HapticFeedback.notificationOccurred('error');
+            }
+        }
+    });
+
+    // Рендеринг плана с анимациями
     function renderWeekPlan() {
         const container = document.getElementById('week-plan-container');
+        const weekInfo = document.getElementById('week-info');
         container.innerHTML = '';
         
+        if (appData.weekDates && appData.weekDates.length > 0) {
+            weekInfo.textContent = `Неделя ${appData.weekNumber} • ${formatWeekRange(appData.weekDates)}`;
+        }
+
         appData.plan.forEach((dayData, index) => {
             const dayCard = document.createElement('div');
             dayCard.className = 'day-card';
-            if (dayData.isRestDay) {
+            if (dayData.is_rest_day) {
                 dayCard.classList.add('rest-day');
             }
             
-            const exerciseCountText = dayData.isRestDay 
+            // Анимация появления с задержкой
+            dayCard.style.animationDelay = `${index * 0.1}s`;
+            dayCard.style.animation = 'scaleIn 0.5s ease-out forwards';
+            dayCard.style.opacity = '0';
+
+            const exerciseCountText = dayData.is_rest_day 
                 ? '🏖️ Выходной' 
                 : `${dayData.exercises.length} упр.`;
 
-            const notificationInfo = dayData.notificationTime && !dayData.isRestDay 
-                ? `<div class="notification-time">🔔 ${dayData.notificationTime}</div>`
+            const notificationInfo = dayData.notification_time && !dayData.is_rest_day 
+                ? `<div class="notification-time">🔔 ${dayData.notification_time}</div>`
+                : '';
+
+            const dateDisplay = appData.weekDates && appData.weekDates[index] 
+                ? formatDate(appData.weekDates[index])
                 : '';
 
             dayCard.innerHTML = `
                 <div class="day-header">
-                    <span class="day-name">${dayNames[index]}</span>
-                    <span class="exercise-count">${exerciseCountText}</span>
+                    <div class="day-main-info">
+                        <span class="day-name">${dayNames[index]}</span>
+                        <span class="exercise-count">${exerciseCountText}</span>
+                    </div>
+                    <div class="day-date">${dateDisplay}</div>
                 </div>
                 ${notificationInfo}
+                ${!dayData.is_rest_day && dayData.exercises.length > 0 ? 
+                    `<div class="day-exercises-preview">
+                        ${dayData.exercises.slice(0, 2).map(ex => 
+                            `<span class="exercise-preview">${ex.name}</span>`
+                        ).join('')}
+                        ${dayData.exercises.length > 2 ? '<span class="exercise-more">...</span>' : ''}
+                    </div>` : ''
+                }
             `;
             
-            dayCard.addEventListener('click', () => {
-                openDayModal(index);
-            });
-            
+            dayCard.addEventListener('click', () => openDayModal(index));
             container.appendChild(dayCard);
         });
     }
 
-    function renderProfile() {
-        if (appData.profile) {
-            document.getElementById('stat-days').textContent = appData.profile.completedDays || 0;
-            document.getElementById('stat-weeks').textContent = appData.profile.completedWeeks || 0;
-            document.getElementById('stat-progress').textContent = appData.profile.progress || "0/0";
+    // Загрузка статистики
+    async function loadStats() {
+        try {
+            const response = await fetch('/api/stats', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `tma ${tg.initData}`
+                }
+            });
+            
+            if (response.ok) {
+                appData.stats = await response.json();
+                renderProfile();
+            }
+        } catch (error) {
+            console.error('Error loading stats:', error);
         }
     }
 
-    // --- МОДАЛЬНЫЕ ОКНА ---
+    function renderProfile() {
+        document.getElementById('stat-days').textContent = appData.stats.completedThisWeek || 0;
+        document.getElementById('stat-weeks').textContent = Math.floor((appData.stats.totalCompleted || 0) / 5);
+        document.getElementById('stat-total').textContent = appData.stats.totalCompleted || 0;
+        
+        const progressElement = document.getElementById('stat-progress');
+        const completed = appData.stats.completedThisWeek || 0;
+        const trainingDaysCount = appData.plan.filter(day => !day.is_rest_day).length;
+        progressElement.textContent = `${completed}/${trainingDaysCount} дней`;
+        
+        const progressBar = document.getElementById('progress-bar');
+        if (progressBar) {
+            const progressPercent = trainingDaysCount > 0 ? Math.min((completed / trainingDaysCount) * 100, 100) : 0;
+            progressBar.style.width = `${progressPercent}%`;
+            progressBar.style.backgroundColor = progressPercent >= 80 ? '#28a745' : 
+                                              progressPercent >= 60 ? '#ffc107' : '#007bff';
+        }
+
+        const weekInfoElement = document.getElementById('week-info-profile');
+        if (weekInfoElement && appData.weekDates && appData.weekDates.length > 0) {
+            weekInfoElement.textContent = `Неделя ${appData.weekNumber} • ${formatWeekRange(appData.weekDates)}`;
+        }
+    }
+
+    // Модальные окна
     function openDayModal(dayIndex) {
         currentEditingDayIndex = dayIndex;
         const dayData = appData.plan[dayIndex];
 
-        document.getElementById('modal-day-title').textContent = `Упражнения на ${dayNames[dayIndex]}`;
+        const dateDisplay = appData.weekDates && appData.weekDates[dayIndex] 
+            ? formatDate(appData.weekDates[dayIndex])
+            : '';
+        document.getElementById('modal-day-title').textContent = 
+            `${dayNames[dayIndex]} • ${dateDisplay}`;
+
         renderExercisesList(dayData.exercises);
         
         const form = document.getElementById('add-exercise-form');
-        form.style.display = dayData.isRestDay ? 'none' : 'flex';
-
-        // Заполняем настройки уведомлений
-        document.getElementById('notification-time').value = dayData.notificationTime || '19:00';
-        document.getElementById('notification-interval').value = dayData.notificationInterval || 10;
-
-        // Показываем/скрываем настройки уведомлений
+        const restDayToggle = document.getElementById('rest-day-toggle');
         const notificationSettings = document.getElementById('notification-settings');
-        notificationSettings.style.display = dayData.isRestDay ? 'none' : 'block';
+        
+        restDayToggle.checked = dayData.is_rest_day;
+        form.style.display = dayData.is_rest_day ? 'none' : 'flex';
+        notificationSettings.style.display = dayData.is_rest_day ? 'none' : 'block';
 
-        modal.style.display = 'flex';
+        document.getElementById('notification-time').value = dayData.notification_time || '19:00';
+        document.getElementById('notification-interval').value = dayData.notification_interval || 10;
+        document.getElementById('rest-between-sets').value = dayData.rest_between_sets || 60;
+        document.getElementById('rest-after-exercise').value = dayData.rest_after_exercise || 60;
+
+        openModal(modal);
     }
 
     function closeDayModal() {
-        modal.style.display = 'none';
+        closeModal(modal);
         currentEditingDayIndex = null;
     }
 
-    function openSettingsModal() {
-        loadSettings().then(() => {
-            document.getElementById('global-notifications').checked = appData.settings.notificationsEnabled !== false;
-            document.getElementById('sound-enabled').checked = appData.settings.soundEnabled !== false;
-            document.getElementById('language-select').value = appData.settings.language || 'ru';
-            document.getElementById('timezone-select').value = appData.settings.timezone || 'Europe/Moscow';
-            
-            settingsModal.style.display = 'flex';
-        });
+    function closeSettingsModal() {
+        closeModal(settingsModal);
     }
 
-    function closeSettingsModal() {
-        settingsModal.style.display = 'none';
-    }
+    // Обработчик переключения выходного дня
+    document.getElementById('rest-day-toggle').addEventListener('change', function() {
+        if (currentEditingDayIndex === null) return;
+        
+        const isRestDay = this.checked;
+        appData.plan[currentEditingDayIndex].is_rest_day = isRestDay;
+        
+        const form = document.getElementById('add-exercise-form');
+        const notificationSettings = document.getElementById('notification-settings');
+        
+        // Анимация переключения
+        form.style.opacity = '0';
+        notificationSettings.style.opacity = '0';
+        
+        setTimeout(() => {
+            form.style.display = isRestDay ? 'none' : 'flex';
+            notificationSettings.style.display = isRestDay ? 'none' : 'block';
+            
+            setTimeout(() => {
+                form.style.opacity = '1';
+                notificationSettings.style.opacity = '1';
+            }, 50);
+        }, 300);
+
+        if (isRestDay) {
+            appData.plan[currentEditingDayIndex].exercises = [];
+            renderExercisesList([]);
+        }
+        
+        savePlan();
+        renderWeekPlan();
+        tg.HapticFeedback.impactOccurred('medium');
+    });
 
     function renderExercisesList(exercises) {
         const listContainer = document.getElementById('exercises-list');
         listContainer.innerHTML = '';
         
         if (exercises.length === 0) {
-            listContainer.innerHTML = '<p style="color: var(--secondary-text-color); text-align: center; padding: 20px;">Упражнений пока нет</p>';
+            listContainer.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 20px; animation: fadeIn 0.5s ease-out;">Упражнений пока нет</p>';
             return;
         }
 
         exercises.forEach((ex, index) => {
             const item = document.createElement('div');
             item.className = 'exercise-item';
+            item.style.animationDelay = `${index * 0.1}s`;
             item.innerHTML = `
                 <div class="exercise-info">
                     <strong>${ex.name}</strong>
-                    <span>${ex.sets} подход(а) × ${ex.reps} повторений</span>
+                    <span>${ex.sets} подход(а) × ${ex.reps}</span>
+                    <small>Отдых: ${ex.rest_between_sets || 60}с между подходами, ${ex.rest_after_exercise || 60}с после</small>
                 </div>
                 <button class="delete-btn" data-index="${index}" title="Удалить упражнение">❌</button>
             `;
@@ -152,11 +347,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // --- РАБОТА С API ---
+    // Работа с API
     async function loadPlan() {
         try {
             tg.MainButton.showProgress();
-            const response = await fetch(`/api/plan`, {
+            const response = await fetch('/api/plan', {
                 method: 'GET',
                 headers: {
                     'Authorization': `tma ${tg.initData}`
@@ -165,21 +360,15 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (!response.ok) throw new Error('Ошибка при загрузке плана');
             
-            const planFromServer = await response.json();
-            appData.plan = planFromServer;
+            const data = await response.json();
+            appData.plan = data.plan;
+            appData.weekDates = data.weekDates;
+            appData.weekNumber = data.weekNumber;
+            
             renderWeekPlan();
         } catch (error) {
             console.error(error);
-            tg.showAlert('Не удалось загрузить план. Используются демо-данные.');
-            // Демо-данные
-            appData.plan = dayNames.map((day, index) => ({ 
-                day, 
-                exercises: [], 
-                isRestDay: index >= 5,
-                notificationTime: "19:00",
-                notificationInterval: 10
-            }));
-            renderWeekPlan();
+            tg.showAlert('Не удалось загрузить план тренировок');
         } finally {
             tg.MainButton.hideProgress();
         }
@@ -188,7 +377,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function savePlan() {
         try {
             tg.MainButton.showProgress();
-            const response = await fetch(`/api/plan`, {
+            const response = await fetch('/api/plan', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -200,68 +389,17 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) throw new Error('Ошибка при сохранении плана');
             
             const result = await response.json();
-            tg.showPopup({
-                title: 'Успех!',
-                message: result.message,
-                buttons: [{ type: 'ok' }]
-            });
+            tg.HapticFeedback.notificationOccurred('success');
         } catch (error) {
             console.error(error);
-            tg.showAlert('Не удалось сохранить план. Проверьте соединение.');
+            tg.showAlert('Не удалось сохранить план');
+            tg.HapticFeedback.notificationOccurred('error');
         } finally {
             tg.MainButton.hideProgress();
         }
     }
 
-    async function loadSettings() {
-        try {
-            const response = await fetch(`/api/settings`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `tma ${tg.initData}`
-                }
-            });
-            
-            if (response.ok) {
-                appData.settings = await response.json();
-            }
-        } catch (error) {
-            console.error('Ошибка загрузки настроек:', error);
-        }
-    }
-
-    async function saveSettings() {
-        try {
-            const response = await fetch(`/api/settings`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `tma ${tg.initData}`
-                },
-                body: JSON.stringify({ 
-                    settings: {
-                        notificationsEnabled: document.getElementById('global-notifications').checked,
-                        soundEnabled: document.getElementById('sound-enabled').checked,
-                        language: document.getElementById('language-select').value,
-                        timezone: document.getElementById('timezone-select').value
-                    }
-                })
-            });
-            
-            if (response.ok) {
-                tg.showPopup({
-                    title: 'Настройки сохранены',
-                    message: 'Изменения применены успешно!',
-                    buttons: [{ type: 'ok' }]
-                });
-            }
-        } catch (error) {
-            console.error('Ошибка сохранения настроек:', error);
-            tg.showAlert('Не удалось сохранить настройки.');
-        }
-    }
-
-    // --- ОБРАБОТКА СОБЫТИЙ ---
+    // Обработчики событий
     document.getElementById('modal-close-btn').addEventListener('click', closeDayModal);
     document.getElementById('settings-close-btn').addEventListener('click', closeSettingsModal);
 
@@ -272,8 +410,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const notificationTime = document.getElementById('notification-time').value;
         const notificationInterval = document.getElementById('notification-interval').value;
 
-        appData.plan[currentEditingDayIndex].notificationTime = notificationTime;
-        appData.plan[currentEditingDayIndex].notificationInterval = parseInt(notificationInterval);
+        appData.plan[currentEditingDayIndex].notification_time = notificationTime;
+        appData.plan[currentEditingDayIndex].notification_interval = parseInt(notificationInterval);
 
         savePlan();
         
@@ -282,52 +420,70 @@ document.addEventListener('DOMContentLoaded', () => {
             message: `Уведомления: ${notificationTime}, интервал: ${notificationInterval} мин`,
             buttons: [{ type: 'ok' }]
         });
+        tg.HapticFeedback.notificationOccurred('success');
     });
 
-    // Сохранение глобальных настроек
-    document.getElementById('save-global-settings').addEventListener('click', () => {
-        saveSettings();
-    });
-
-    // Добавление упражнения
+    // Добавление упражнения с анимацией
     document.getElementById('add-exercise-form').addEventListener('submit', (e) => {
         e.preventDefault();
         
         const name = document.getElementById('ex-name').value;
         const sets = document.getElementById('ex-sets').value;
         const reps = document.getElementById('ex-reps').value;
+        const restBetweenSets = document.getElementById('rest-between-sets').value;
+        const restAfterExercise = document.getElementById('rest-after-exercise').value;
 
         if (name && sets && reps && currentEditingDayIndex !== null) {
-            appData.plan[currentEditingDayIndex].exercises.push({ 
+            const newExercise = { 
                 name, 
                 sets: parseInt(sets), 
-                reps 
-            });
+                reps,
+                rest_between_sets: parseInt(restBetweenSets) || 60,
+                rest_after_exercise: parseInt(restAfterExercise) || 60
+            };
+            
+            appData.plan[currentEditingDayIndex].exercises.push(newExercise);
             
             renderExercisesList(appData.plan[currentEditingDayIndex].exercises);
             renderWeekPlan();
             savePlan();
+            
+            // Анимация успешного добавления
+            const form = e.target;
+            form.style.transform = 'scale(0.98)';
+            setTimeout(() => {
+                form.style.transform = 'scale(1)';
+            }, 150);
+            
             e.target.reset();
             tg.HapticFeedback.impactOccurred('light');
         }
     });
 
-    // Удаление упражнения
+    // Удаление упражнения с анимацией
     document.getElementById('exercises-list').addEventListener('click', (e) => {
         if (e.target.classList.contains('delete-btn')) {
             const exerciseIndex = parseInt(e.target.getAttribute('data-index'));
             if (currentEditingDayIndex !== null && !isNaN(exerciseIndex)) {
-                appData.plan[currentEditingDayIndex].exercises.splice(exerciseIndex, 1);
-                renderExercisesList(appData.plan[currentEditingDayIndex].exercises);
-                renderWeekPlan();
-                savePlan();
+                const exerciseItem = e.target.closest('.exercise-item');
+                exerciseItem.style.animation = 'fadeOut 0.3s ease-out forwards';
+                
+                setTimeout(() => {
+                    appData.plan[currentEditingDayIndex].exercises.splice(exerciseIndex, 1);
+                    renderExercisesList(appData.plan[currentEditingDayIndex].exercises);
+                    renderWeekPlan();
+                    savePlan();
+                }, 300);
+                
                 tg.HapticFeedback.notificationOccurred('warning');
             }
         }
     });
 
-    // --- ИНИЦИАЛИЗАЦИЯ ---
-    tg.MainButton.setText('Сохранить и закрыть');
+    // Инициализация
+    tg.MainButton.setText('💪 Сохранить и закрыть');
+    tg.MainButton.show();
+    
     tg.onEvent('mainButtonClicked', () => {
         savePlan().then(() => {
             tg.close();
@@ -340,7 +496,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Загрузка данных
     loadPlan().then(() => {
+        loadStats();
         showScreen('home-screen');
-        tg.MainButton.show();
     });
+
+    // Автообновление
+    setInterval(() => {
+        loadPlan();
+        loadStats();
+    }, 24 * 60 * 60 * 1000);
 });
