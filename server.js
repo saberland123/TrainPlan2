@@ -9,7 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const BOT_TOKEN = process.env.BOT_TOKEN || 'YOUR_BOT_TOKEN';
 
-const bot = new Telegraf(BOT_TOKEN);
+const bot = BOT_TOKEN && BOT_TOKEN !== 'YOUR_BOT_TOKEN' ? new Telegraf(BOT_TOKEN) : null;
 const jobs = {};
 
 // Middleware
@@ -27,8 +27,15 @@ const db = new sqlite3.Database(':memory:', (err) => {
 });
 
 function initDatabase() {
-    // Создаем таблицы последовательно
+    // Создаем таблицы последовательно с обработкой ошибок
     const tables = [
+        `CREATE TABLE IF NOT EXISTS current_week (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            week_start DATE,
+            week_number INTEGER,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )`,
+        
         `CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             telegram_id INTEGER UNIQUE,
@@ -38,7 +45,7 @@ function initDatabase() {
             theme TEXT DEFAULT 'dark',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )`,
-        
+
         `CREATE TABLE IF NOT EXISTS training_plans (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -47,7 +54,7 @@ function initDatabase() {
             notification_time TEXT DEFAULT '19:00',
             FOREIGN KEY(user_id) REFERENCES users(id)
         )`,
-        
+
         `CREATE TABLE IF NOT EXISTS exercises (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             plan_id INTEGER,
@@ -57,7 +64,7 @@ function initDatabase() {
             order_index INTEGER,
             FOREIGN KEY(plan_id) REFERENCES training_plans(id)
         )`,
-        
+
         `CREATE TABLE IF NOT EXISTS completed_workouts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER,
@@ -68,14 +75,7 @@ function initDatabase() {
             reps TEXT,
             FOREIGN KEY(user_id) REFERENCES users(id)
         )`,
-        
-        `CREATE TABLE IF NOT EXISTS current_week (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            week_start DATE,
-            week_number INTEGER,
-            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-        )`,
-        
+
         `CREATE TABLE IF NOT EXISTS groups (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -87,7 +87,7 @@ function initDatabase() {
             is_active BOOLEAN DEFAULT 1,
             FOREIGN KEY(creator_id) REFERENCES users(id)
         )`,
-        
+
         `CREATE TABLE IF NOT EXISTS group_members (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             group_id INTEGER,
@@ -98,7 +98,7 @@ function initDatabase() {
             FOREIGN KEY(user_id) REFERENCES users(id),
             UNIQUE(group_id, user_id)
         )`,
-        
+
         `CREATE TABLE IF NOT EXISTS leaderboard (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER UNIQUE,
@@ -111,37 +111,25 @@ function initDatabase() {
         )`
     ];
 
-    // Создаем таблицы последовательно
-    function createTable(index) {
-        if (index >= tables.length) {
-            console.log('✅ All tables created successfully');
-            // Создаем тестового пользователя после создания всех таблиц
-            createTestUser();
-            return;
-        }
-        
-        db.run(tables[index], function(err) {
+    let completed = 0;
+    tables.forEach((sql, index) => {
+        db.run(sql, (err) => {
             if (err) {
-                console.error(`Error creating table ${index + 1}:`, err);
+                console.error(`❌ Error creating table ${index + 1}:`, err);
             } else {
                 console.log(`✅ Table ${index + 1} created successfully`);
-                createTable(index + 1);
+            }
+            completed++;
+            if (completed === tables.length) {
+                console.log('✅ All tables created successfully');
+                // Создаем тестового пользователя после всех таблиц
+                db.run(`INSERT OR IGNORE INTO users (id, telegram_id, first_name) VALUES (1, 123456, 'Test User')`, (err) => {
+                    if (err) console.error('Error creating test user:', err);
+                    else console.log('✅ Test user created successfully');
+                });
             }
         });
-    }
-    
-    function createTestUser() {
-        db.run(`INSERT OR IGNORE INTO users (id, telegram_id, first_name) VALUES (1, 123456, 'Test User')`, (err) => {
-            if (err) {
-                console.error('Error creating test user:', err);
-            } else {
-                console.log('✅ Test user created successfully');
-            }
-        });
-    }
-    
-    // Начинаем создание таблиц
-    createTable(0);
+    });
 }
 
 function getCurrentWeekDates() {
@@ -177,7 +165,9 @@ function updateCurrentWeek() {
     db.run(`INSERT OR REPLACE INTO current_week (id, week_start, week_number) VALUES (1, ?, ?)`, 
         [weekStart.toISOString().split('T')[0], weekNumber], 
         (err) => {
-            if (err) console.error('Error updating week:', err);
+            if (err) {
+                console.error('Error updating week:', err);
+            }
         }
     );
 
@@ -290,44 +280,41 @@ async function sendWorkoutNotification(userId, dayOfWeek, exercises) {
     }
 }
 
-bot.start(async (ctx) => {
-    const user = ctx.from;
-    
-    // Добавляем пользователя в базу данных
-    db.run(`INSERT OR IGNORE INTO users (telegram_id, username, first_name) VALUES (?, ?, ?)`,
-        [user.id, user.username, user.first_name], (err) => {
-            if (err) {
-                console.error('Error adding user to database:', err);
-            }
-        });
-    
-    await ctx.reply(
-        `👋 Привет, ${user.first_name}!\\n\\n` +
-        `Я твой персональный тренер! 🏋️\\n\\n` +
-        `Открой Web App чтобы настроить свой план тренировок:`,
-        Markup.keyboard([
-            [Markup.button.webApp('📅 Открыть TrainPlan', `https://${process.env.RENDER_EXTERNAL_URL || 'localhost:3000'}`)]
-        ]).resize()
-    );
-});
-
-bot.on('callback_query', async (ctx) => {
-    const callbackData = ctx.callbackQuery.data;
-
-    if (callbackData.startsWith('start_workout_')) {
-        const dayOfWeek = parseInt(callbackData.replace('start_workout_', ''));
-        await ctx.answerCbQuery();
-        await ctx.reply(`🎯 Начинаем тренировку! Удачи! 💪`);
+if (bot) {
+    bot.start(async (ctx) => {
+        const user = ctx.from;
         
-        // Здесь можно добавить логику отметки выполнения тренировки
-        const userId = ctx.from.id;
-        const today = new Date().toISOString().split('T')[0];
+        db.run(`INSERT OR IGNORE INTO users (telegram_id, username, first_name) VALUES (?, ?, ?)`,
+            [user.id, user.username, user.first_name]);
         
-        db.run(`INSERT INTO completed_workouts (user_id, exercise_name, completed_date, sets, reps) 
-                VALUES (?, ?, ?, ?, ?)`,
-            [userId, `Тренировка ${dayOfWeek + 1} дня`, today, 1, 'completed']);
-    }
-});
+        await ctx.reply(
+            `👋 Привет, ${user.first_name}!\\n\\n` +
+            `Я твой персональный тренер! 🏋️\\n\\n` +
+            `Открой Web App чтобы настроить свой план тренировок:`,
+            Markup.keyboard([
+                [Markup.button.webApp('📅 Открыть TrainPlan', `https://${process.env.RENDER_EXTERNAL_URL || 'localhost:3000'}`)]
+            ]).resize()
+        );
+    });
+
+    bot.on('callback_query', async (ctx) => {
+        const callbackData = ctx.callbackQuery.data;
+
+        if (callbackData.startsWith('start_workout_')) {
+            const dayOfWeek = parseInt(callbackData.replace('start_workout_', ''));
+            await ctx.answerCbQuery();
+            await ctx.reply(`🎯 Начинаем тренировку! Удачи! 💪`);
+            
+            // Здесь можно добавить логику отметки выполнения тренировки
+            const userId = ctx.from.id;
+            const today = new Date().toISOString().split('T')[0];
+            
+            db.run(`INSERT INTO completed_workouts (user_id, exercise_name, completed_date, sets, reps) 
+                    VALUES (?, ?, ?, ?, ?)`,
+                [userId, `Тренировка ${dayOfWeek + 1} дня`, today, 1, 'completed']);
+        }
+    });
+}
 
 // API endpoints
 app.get('/api/plan', (req, res) => {
@@ -336,12 +323,12 @@ app.get('/api/plan', (req, res) => {
     
     db.all(`SELECT * FROM training_plans WHERE user_id = ? ORDER BY day_of_week`, [userId], (err, plans) => {
         if (err) {
-            console.error('Error fetching plans:', err);
+            console.error(err);
             return res.status(500).json({ error: 'Database error' });
         }
 
-        // Если планов нет, создаем пустой план
-        if (!plans || plans.length === 0) {
+        if (plans.length === 0) {
+            // Создаем пустой план если его нет
             const emptyPlan = Array(7).fill().map((_, dayIndex) => ({
                 day_of_week: dayIndex,
                 is_rest_day: false,
@@ -359,346 +346,28 @@ app.get('/api/plan', (req, res) => {
         const planPromises = plans.map(plan => {
             return new Promise((resolve, reject) => {
                 db.all(`SELECT * FROM exercises WHERE plan_id = ? ORDER BY order_index`, [plan.id], (err, exercises) => {
-                    if (err) {
-                        reject(err);
-                    } else {
-                        resolve({
-                            ...plan,
-                            exercises: exercises || []
-                        });
-                    }
+                    if (err) reject(err);
+                    else resolve({
+                        ...plan,
+                        exercises: exercises || []
+                    });
                 });
             });
         });
 
         Promise.all(planPromises)
-            .then(fullPlan => {
-                res.json({ 
-                    plan: fullPlan, 
-                    weekDates: weekDates.map(date => date.toISOString()),
-                    weekNumber
-                });
-            })
+            .then(fullPlan => res.json({ 
+                plan: fullPlan, 
+                weekDates: weekDates.map(date => date.toISOString()),
+                weekNumber
+            }))
             .catch(error => {
-                console.error('Error loading exercises:', error);
+                console.error(error);
                 res.status(500).json({ error: 'Database error' });
             });
     });
 });
 
-app.post('/api/plan', (req, res) => {
-    const userId = 1;
-    const plan = req.body.plan;
-
-    console.log('Saving plan for user:', userId);
-
-    if (!plan || !Array.isArray(plan)) {
-        return res.status(400).json({ error: 'Invalid plan data' });
-    }
-
-    // Удаляем старые данные
-    db.serialize(() => {
-        db.run(`DELETE FROM exercises WHERE plan_id IN (SELECT id FROM training_plans WHERE user_id = ?)`, [userId], (err) => {
-            if (err) {
-                console.error('Error deleting exercises:', err);
-                return res.status(500).json({ error: 'Database error' });
-            }
-
-            db.run(`DELETE FROM training_plans WHERE user_id = ?`, [userId], (err) => {
-                if (err) {
-                    console.error('Error deleting plans:', err);
-                    return res.status(500).json({ error: 'Database error' });
-                }
-
-                let completed = 0;
-                const total = plan.length;
-
-                plan.forEach((dayPlan, dayIndex) => {
-                    db.run(`INSERT INTO training_plans (user_id, day_of_week, is_rest_day, notification_time) 
-                            VALUES (?, ?, ?, ?)`,
-                        [userId, dayIndex, dayPlan.is_rest_day || false, dayPlan.notification_time || '19:00'],
-                        function(err) {
-                            if (err) {
-                                console.error('Error saving plan:', err);
-                                return;
-                            }
-
-                            const planId = this.lastID;
-                            
-                            // Сохраняем упражнения только если не выходной
-                            if (!dayPlan.is_rest_day && dayPlan.exercises && dayPlan.exercises.length > 0) {
-                                let exCompleted = 0;
-                                const exTotal = dayPlan.exercises.length;
-
-                                dayPlan.exercises.forEach((exercise, exerciseIndex) => {
-                                    db.run(`INSERT INTO exercises (plan_id, name, sets, reps, order_index) 
-                                            VALUES (?, ?, ?, ?, ?)`,
-                                        [planId, exercise.name, exercise.sets || 1, exercise.reps || '10', exerciseIndex],
-                                        function(err) {
-                                            if (err) {
-                                                console.error('Error saving exercise:', err);
-                                            }
-                                            exCompleted++;
-                                            
-                                            if (exCompleted === exTotal) {
-                                                completed++;
-                                                checkDone();
-                                            }
-                                        }
-                                    );
-                                });
-                            } else {
-                                completed++;
-                                checkDone();
-                            }
-                        }
-                    );
-                });
-
-                function checkDone() {
-                    if (completed === total) {
-                        scheduleNotifications(userId);
-                        res.json({ status: 'success', message: 'План сохранен!' });
-                    }
-                }
-
-                // Если нет планов для сохранения
-                if (total === 0) {
-                    res.json({ status: 'success', message: 'План сохранен!' });
-                }
-            });
-        });
-    });
-});
-
-app.post('/api/load-default-plan', (req, res) => {
-    const userId = 1;
-
-    createDefaultPlan(userId)
-        .then(() => {
-            res.json({ status: 'success', message: 'Базовый план загружен!' });
-        })
-        .catch(error => {
-            console.error('Error loading default plan:', error);
-            res.status(500).json({ error: 'Ошибка при загрузке базового плана' });
-        });
-});
-
-// Групповые тренировки
-app.get('/api/groups/user/:user_id', (req, res) => {
-    const userId = req.params.user_id;
-    
-    db.all(`
-        SELECT g.*, COUNT(gm.user_id) as member_count
-        FROM groups g
-        LEFT JOIN group_members gm ON g.id = gm.group_id AND gm.is_active = 1
-        WHERE g.id IN (SELECT group_id FROM group_members WHERE user_id = ? AND is_active = 1)
-        AND g.is_active = 1
-        GROUP BY g.id
-        ORDER BY g.created_at DESC
-    `, [userId], (err, groups) => {
-        if (err) {
-            console.error('Error loading user groups:', err);
-            return res.status(500).json({ error: 'Database error' });
-        }
-        
-        res.json({ groups: groups || [] });
-    });
-});
-
-app.post('/api/groups/create', (req, res) => {
-    const { name, description, plan_type, creator_id } = req.body;
-    
-    console.log('Creating group with data:', { name, description, plan_type, creator_id });
-
-    if (!name || !name.trim()) {
-        return res.status(400).json({ error: 'Название группы обязательно' });
-    }
-
-    const inviteCode = uuidv4().substring(0, 8).toUpperCase();
-    const userId = creator_id || 1;
-    
-    db.run(`INSERT INTO groups (name, description, creator_id, invite_code, plan_type) VALUES (?, ?, ?, ?, ?)`,
-        [name.trim(), (description || '').trim(), userId, inviteCode, plan_type || 'week'],
-        function(err) {
-            if (err) {
-                console.error('Error creating group:', err);
-                return res.status(500).json({ error: 'Ошибка при создании группы' });
-            }
-            
-            const groupId = this.lastID;
-            
-            db.run(`INSERT INTO group_members (group_id, user_id) VALUES (?, ?)`,
-                [groupId, userId],
-                function(err) {
-                    if (err) {
-                        console.error('Error adding user to group:', err);
-                        return res.status(500).json({ error: 'Ошибка при добавлении в группу' });
-                    }
-                    
-                    res.json({
-                        status: 'success',
-                        group_id: groupId,
-                        invite_code: inviteCode,
-                        message: 'Группа создана успешно!'
-                    });
-                }
-            );
-        }
-    );
-});
-
-app.post('/api/groups/join', (req, res) => {
-    const { invite_code, user_id } = req.body;
-    
-    if (!invite_code) {
-        return res.status(400).json({ error: 'Код приглашения обязателен' });
-    }
-
-    db.get(`SELECT * FROM groups WHERE invite_code = ? AND is_active = 1`, [invite_code.toUpperCase()], (err, group) => {
-        if (err) {
-            console.error('Error finding group:', err);
-            return res.status(500).json({ error: 'Ошибка базы данных' });
-        }
-        
-        if (!group) {
-            return res.status(404).json({ error: 'Группа не найдена или код неверный' });
-        }
-        
-        const userId = user_id || 1;
-        
-        db.run(`INSERT OR IGNORE INTO group_members (group_id, user_id) VALUES (?, ?)`,
-            [group.id, userId],
-            function(err) {
-                if (err) {
-                    console.error('Error joining group:', err);
-                    return res.status(500).json({ error: 'Ошибка при присоединении к группе' });
-                }
-                
-                if (this.changes === 0) {
-                    return res.status(400).json({ error: 'Вы уже состоите в этой группе' });
-                }
-                
-                res.json({
-                    status: 'success',
-                    group_name: group.name,
-                    message: 'Вы успешно присоединились к группе!'
-                });
-            }
-        );
-    });
-});
-
-app.get('/api/groups/:group_id', (req, res) => {
-    const groupId = req.params.group_id;
-    
-    db.get(`SELECT * FROM groups WHERE id = ? AND is_active = 1`, [groupId], (err, group) => {
-        if (err) {
-            console.error('Error loading group:', err);
-            return res.status(500).json({ error: 'Ошибка базы данных' });
-        }
-        
-        if (!group) {
-            return res.status(404).json({ error: 'Группа не найдена' });
-        }
-        
-        db.all(`
-            SELECT u.id, u.first_name, u.username, gm.joined_at
-            FROM group_members gm
-            JOIN users u ON gm.user_id = u.id
-            WHERE gm.group_id = ? AND gm.is_active = 1
-            ORDER BY gm.joined_at ASC
-        `, [groupId], (err, members) => {
-            if (err) {
-                console.error('Error loading group members:', err);
-                return res.status(500).json({ error: 'Ошибка базы данных' });
-            }
-            
-            res.json({
-                group,
-                members: members || []
-            });
-        });
-    });
-});
-
-// Лидерборд
-app.get('/api/leaderboard', (req, res) => {
-    db.all(`
-        SELECT u.first_name, u.username, l.total_workout_days, l.current_streak, l.longest_streak
-        FROM leaderboard l
-        JOIN users u ON l.user_id = u.id
-        ORDER BY l.total_workout_days DESC, l.longest_streak DESC
-        LIMIT 50
-    `, (err, leaders) => {
-        if (err) {
-            console.error('Error loading leaderboard:', err);
-            return res.status(500).json({ error: 'Ошибка базы данных' });
-        }
-        
-        res.json({ leaders: leaders || [] });
-    });
-});
-
-// Аналитика
-app.get('/api/analytics/:user_id', (req, res) => {
-    const userId = req.params.user_id;
-    
-    db.get(`SELECT * FROM leaderboard WHERE user_id = ?`, [userId], (err, leaderStats) => {
-        if (err) {
-            console.error('Error loading analytics:', err);
-            return res.status(500).json({ error: 'Ошибка базы данных' });
-        }
-        
-        res.json({
-            leader_stats: leaderStats || {
-                total_workout_days: 0,
-                current_streak: 0,
-                longest_streak: 0
-            }
-        });
-    });
-});
-
-// Health check
-app.get('/health', (req, res) => {
-    res.json({ 
-        status: 'OK', 
-        message: 'Server is running',
-        timestamp: new Date().toISOString()
-    });
-});
-
-// Запуск сервера
-app.listen(PORT, '0.0.0.0', () => {
-    console.log('🚀 TrainPlan Server Started on port', PORT);
-    
-    // Запускаем бота только если токен есть
-    if (BOT_TOKEN && BOT_TOKEN !== 'YOUR_BOT_TOKEN') {
-        bot.launch().then(() => {
-            console.log('✅ Telegram Bot Started');
-        }).catch(err => {
-            console.error('❌ Bot startup error:', err);
-        });
-    } else {
-        console.log('❌ Bot token not found, running in web-only mode');
-    }
-    
-    updateCurrentWeek();
-});
-
-process.on('SIGINT', () => {
-    console.log('\n🛑 Stopping server...');
-    Object.values(jobs).flat().forEach(job => job.cancel());
-    bot.stop();
-    process.exit(0);
-});// Добавьте эту функцию для обработки ошибок в маршрутах
-function handleDatabaseError(res, error, message = 'Database error') {
-    console.error(message, error);
-    res.status(500).json({ error: message });
-}
-
-// Обновите обработчик маршрута /api/plan для лучшей обработки ошибок
 app.post('/api/plan', (req, res) => {
     const userId = 1;
     const plan = req.body.plan;
@@ -713,12 +382,14 @@ app.post('/api/plan', (req, res) => {
         // Удаляем старые данные
         db.run(`DELETE FROM exercises WHERE plan_id IN (SELECT id FROM training_plans WHERE user_id = ?)`, [userId], (err) => {
             if (err) {
-                return handleDatabaseError(res, err, 'Error deleting exercises');
+                console.error('Error deleting exercises:', err);
+                return res.status(500).json({ error: 'Database error' });
             }
 
             db.run(`DELETE FROM training_plans WHERE user_id = ?`, [userId], (err) => {
                 if (err) {
-                    return handleDatabaseError(res, err, 'Error deleting plans');
+                    console.error('Error deleting plans:', err);
+                    return res.status(500).json({ error: 'Database error' });
                 }
 
                 let plansSaved = 0;
@@ -782,4 +453,220 @@ app.post('/api/plan', (req, res) => {
             });
         });
     });
+});
+
+app.post('/api/load-default-plan', (req, res) => {
+    const userId = 1;
+
+    createDefaultPlan(userId)
+        .then(() => {
+            res.json({ status: 'success', message: 'Базовый план загружен!' });
+        })
+        .catch(error => {
+            console.error('Error loading default plan:', error);
+            res.status(500).json({ error: 'Ошибка при загрузке базового плана' });
+        });
+});
+
+// Групповые тренировки
+app.get('/api/groups/user/:user_id', (req, res) => {
+    const userId = req.params.user_id;
+    
+    db.all(`
+        SELECT g.*, COUNT(gm.user_id) as member_count
+        FROM groups g
+        LEFT JOIN group_members gm ON g.id = gm.group_id AND gm.is_active = 1
+        WHERE g.id IN (SELECT group_id FROM group_members WHERE user_id = ? AND is_active = 1)
+        AND g.is_active = 1
+        GROUP BY g.id
+        ORDER BY g.created_at DESC
+    `, [userId], (err, groups) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Database error' });
+        }
+        
+        res.json({ groups: groups || [] });
+    });
+});
+
+app.post('/api/groups/create', async (req, res) => {
+    const { name, description, plan_type, creator_id } = req.body;
+    
+    console.log('Creating group:', { name, description, plan_type, creator_id });
+
+    try {
+        const inviteCode = uuidv4().substring(0, 8).toUpperCase();
+        
+        db.run(`INSERT INTO groups (name, description, creator_id, invite_code, plan_type) VALUES (?, ?, ?, ?, ?)`,
+            [name, description, creator_id || 1, inviteCode, plan_type || 'week'],
+            function(err) {
+                if (err) {
+                    console.error('Error creating group:', err);
+                    return res.status(500).json({ error: 'Ошибка при создании группы: ' + err.message });
+                }
+                
+                const groupId = this.lastID;
+                
+                db.run(`INSERT INTO group_members (group_id, user_id) VALUES (?, ?)`,
+                    [groupId, creator_id || 1],
+                    function(err) {
+                        if (err) {
+                            console.error('Error adding creator to group:', err);
+                            return res.status(500).json({ error: 'Ошибка при добавлении в группу' });
+                        }
+                        
+                        res.json({
+                            status: 'success',
+                            group_id: groupId,
+                            invite_code: inviteCode,
+                            message: 'Группа создана успешно!'
+                        });
+                    }
+                );
+            }
+        );
+    } catch (error) {
+        console.error('Server error creating group:', error);
+        res.status(500).json({ error: 'Ошибка сервера: ' + error.message });
+    }
+});
+
+app.post('/api/groups/join', (req, res) => {
+    const { invite_code, user_id } = req.body;
+    
+    db.get(`SELECT * FROM groups WHERE invite_code = ? AND is_active = 1`, [invite_code], (err, group) => {
+        if (err || !group) {
+            return res.status(404).json({ error: 'Группа не найдена или код неверный' });
+        }
+        
+        db.run(`INSERT OR IGNORE INTO group_members (group_id, user_id) VALUES (?, ?)`,
+            [group.id, user_id || 1],
+            function(err) {
+                if (err) {
+                    console.error(err);
+                    return res.status(500).json({ error: 'Ошибка при присоединении к группе' });
+                }
+                
+                res.json({
+                    status: 'success',
+                    group_name: group.name,
+                    message: 'Вы успешно присоединились к группе!'
+                });
+            }
+        );
+    });
+});
+
+app.get('/api/groups/:group_id', (req, res) => {
+    const groupId = req.params.group_id;
+    
+    db.get(`SELECT * FROM groups WHERE id = ? AND is_active = 1`, [groupId], (err, group) => {
+        if (err || !group) {
+            return res.status(404).json({ error: 'Группа не найдена' });
+        }
+        
+        db.all(`
+            SELECT u.id, u.first_name, u.username, gm.joined_at
+            FROM group_members gm
+            JOIN users u ON gm.user_id = u.id
+            WHERE gm.group_id = ? AND gm.is_active = 1
+            ORDER BY gm.joined_at ASC
+        `, [groupId], (err, members) => {
+            if (err) {
+                console.error(err);
+                return res.status(500).json({ error: 'Ошибка базы данных' });
+            }
+            
+            res.json({
+                group,
+                members: members || []
+            });
+        });
+    });
+});
+
+// Лидерборд
+app.get('/api/leaderboard', (req, res) => {
+    db.all(`
+        SELECT u.first_name, u.username, l.total_workout_days, l.current_streak, l.longest_streak
+        FROM leaderboard l
+        JOIN users u ON l.user_id = u.id
+        ORDER BY l.total_workout_days DESC, l.longest_streak DESC
+        LIMIT 50
+    `, (err, leaders) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Ошибка базы данных' });
+        }
+        
+        res.json({ leaders: leaders || [] });
+    });
+});
+
+// Аналитика
+app.get('/api/analytics/:user_id', (req, res) => {
+    const userId = req.params.user_id;
+    
+    db.get(`SELECT * FROM leaderboard WHERE user_id = ?`, [userId], (err, leaderStats) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Ошибка базы данных' });
+        }
+        
+        res.json({
+            leader_stats: leaderStats || {
+                total_workout_days: 0,
+                current_streak: 0,
+                longest_streak: 0
+            }
+        });
+    });
+});
+
+// Health check
+app.get('/health', (req, res) => {
+    res.json({ 
+        status: 'OK', 
+        message: 'Server is running',
+        timestamp: new Date().toISOString()
+    });
+});
+
+// Запуск сервера
+app.listen(PORT, '0.0.0.0', () => {
+    console.log('🚀 TrainPlan Server Started on port', PORT);
+    
+    // Запускаем бота только если токен есть
+    if (bot && BOT_TOKEN && BOT_TOKEN !== 'YOUR_BOT_TOKEN') {
+        bot.launch().then(() => {
+            console.log('✅ Telegram Bot Started');
+        }).catch(err => {
+            console.error('❌ Bot startup error:', err.message);
+            console.log('ℹ️  Bot not started, but server continues running');
+        });
+    } else {
+        console.log('🤖 Bot not started (no valid token provided)');
+    }
+    
+    updateCurrentWeek();
+});
+
+// Graceful shutdown
+process.once('SIGINT', () => {
+    console.log('\n🛑 Stopping server...');
+    Object.values(jobs).flat().forEach(job => job && job.cancel());
+    if (bot) {
+        bot.stop('SIGINT');
+    }
+    process.exit(0);
+});
+
+process.once('SIGTERM', () => {
+    console.log('\n🛑 Stopping server...');
+    Object.values(jobs).flat().forEach(job => job && job.cancel());
+    if (bot) {
+        bot.stop('SIGTERM');
+    }
+    process.exit(0);
 });
