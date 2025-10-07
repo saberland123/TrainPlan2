@@ -26,13 +26,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Показать уведомление
     function showNotification(message, type = 'success') {
+        // Удаляем старые уведомления
+        document.querySelectorAll('.notification').forEach(notif => notif.remove());
+        
         const notification = document.createElement('div');
         notification.className = `notification ${type}`;
         notification.textContent = message;
         document.body.appendChild(notification);
 
+        // Анимация появления
         setTimeout(() => {
-            notification.remove();
+            notification.style.opacity = '1';
+            notification.style.transform = 'translateY(0)';
+        }, 10);
+
+        setTimeout(() => {
+            notification.style.opacity = '0';
+            notification.style.transform = 'translateY(-20px)';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, 300);
         }, 3000);
     }
 
@@ -44,19 +59,26 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById(screenId).classList.add('active');
     }
 
-    // Модальные окна
+    // Модальные окна - исправленная версия без лагов
     function openModal(modalElement) {
         modalElement.style.display = 'flex';
-        setTimeout(() => {
-            modalElement.classList.add('active');
-        }, 10);
+        document.body.style.overflow = 'hidden'; // Блокируем скролл
+        
+        // Принудительный reflow
+        modalElement.offsetHeight;
+        
+        modalElement.classList.add('active');
     }
 
     function closeModal(modalElement) {
         modalElement.classList.remove('active');
+        document.body.style.overflow = ''; // Разблокируем скролл
+        
         setTimeout(() => {
-            modalElement.style.display = 'none';
-        }, 200);
+            if (!modalElement.classList.contains('active')) {
+                modalElement.style.display = 'none';
+            }
+        }, 300);
     }
 
     // Форматирование даты
@@ -118,23 +140,27 @@ document.addEventListener('DOMContentLoaded', () => {
         button.addEventListener('click', () => showScreen('home-screen'));
     });
 
-    // Загрузка базового плана
+    // Загрузка базового плана - исправленная версия
     document.getElementById('load-default-plan').addEventListener('click', async () => {
         try {
+            showNotification('Загружаем базовый план...', 'success');
+            
             const response = await fetch(`${BACKEND_URL}/api/load-default-plan`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' }
             });
 
+            const result = await response.json();
+            
             if (response.ok) {
                 await loadPlan();
-                showNotification('Базовый план загружен!');
+                showNotification('✅ Базовый план загружен! Теперь вы можете добавить упражнения.');
             } else {
-                showNotification('Ошибка при загрузке плана', 'error');
+                showNotification(result.error || 'Ошибка при загрузке плана', 'error');
             }
         } catch (error) {
             console.error('Error loading default plan:', error);
-            showNotification('Ошибка при загрузке плана', 'error');
+            showNotification('❌ Ошибка при загрузке плана', 'error');
         }
     });
 
@@ -195,7 +221,7 @@ document.addEventListener('DOMContentLoaded', () => {
         event.target.classList.add('active');
     }
 
-    // Создание группы с автокопированием кода
+    // Создание группы с автокопированием кода - исправленная версия
     document.getElementById('create-group-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         
@@ -203,36 +229,52 @@ document.addEventListener('DOMContentLoaded', () => {
         const description = document.getElementById('group-description').value;
         const planType = document.getElementById('group-plan-type').value;
         
+        if (!name.trim()) {
+            showNotification('❌ Введите название группы', 'error');
+            return;
+        }
+
         try {
+            showNotification('Создаем группу...', 'success');
+            
             const response = await fetch(`${BACKEND_URL}/api/groups/create`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    name,
-                    description,
+                    name: name.trim(),
+                    description: description.trim(),
                     plan_type: planType,
                     creator_id: 1
                 })
             });
             
+            const result = await response.json();
+            
             if (response.ok) {
-                const result = await response.json();
-                
                 // Автоматическое копирование кода
-                if (navigator.clipboard) {
+                try {
                     await navigator.clipboard.writeText(result.invite_code);
-                    showNotification(`Код ${result.invite_code} скопирован!`);
-                } else {
-                    showNotification(`Код группы: ${result.invite_code}`);
+                    showNotification(`✅ Группа создана! Код "${result.invite_code}" скопирован в буфер обмена!`);
+                } catch (copyError) {
+                    // Fallback для браузеров без clipboard API
+                    const textArea = document.createElement('textarea');
+                    textArea.value = result.invite_code;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    showNotification(`✅ Группа создана! Код: ${result.invite_code} (скопируйте вручную)`);
                 }
                 
                 document.getElementById('create-group-form').reset();
                 showScreen('groups-screen');
                 loadUserGroups();
+            } else {
+                showNotification(result.error || '❌ Ошибка при создании группы', 'error');
             }
         } catch (error) {
             console.error('Error creating group:', error);
-            showNotification('Ошибка при создании группы', 'error');
+            showNotification('❌ Ошибка при создании группы', 'error');
         }
     });
 
@@ -240,8 +282,13 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('join-group-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         
-        const inviteCode = document.getElementById('invite-code').value.toUpperCase();
+        const inviteCode = document.getElementById('invite-code').value.toUpperCase().trim();
         
+        if (!inviteCode) {
+            showNotification('❌ Введите код приглашения', 'error');
+            return;
+        }
+
         try {
             const response = await fetch(`${BACKEND_URL}/api/groups/join`, {
                 method: 'POST',
@@ -252,32 +299,36 @@ document.addEventListener('DOMContentLoaded', () => {
                 })
             });
             
+            const result = await response.json();
+            
             if (response.ok) {
-                const result = await response.json();
-                showNotification(`Вы присоединились к группе "${result.group_name}"`);
+                showNotification(`✅ Вы присоединились к группе "${result.group_name}"`);
                 document.getElementById('invite-code').value = '';
                 showScreen('groups-screen');
                 loadUserGroups();
             } else {
-                showNotification('Ошибка при присоединении к группе', 'error');
+                showNotification(result.error || '❌ Ошибка при присоединении к группе', 'error');
             }
         } catch (error) {
             console.error('Error joining group:', error);
-            showNotification('Ошибка при присоединении к группе', 'error');
+            showNotification('❌ Ошибка при присоединении к группе', 'error');
         }
     });
 
     // Открытие деталей группы
     window.openGroupDetail = function(groupId) {
         fetch(`${BACKEND_URL}/api/groups/${groupId}`)
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) throw new Error('Group not found');
+                return response.json();
+            })
             .then(data => {
                 renderGroupDetail(data);
                 showScreen('group-detail-screen');
             })
             .catch(error => {
                 console.error('Error loading group details:', error);
-                showNotification('Ошибка при загрузке группы', 'error');
+                showNotification('❌ Ошибка при загрузке группы', 'error');
             });
     };
 
@@ -289,7 +340,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="group-info">
                 <p><strong>Описание:</strong> ${data.group.description || 'Отсутствует'}</p>
                 <p><strong>Тип плана:</strong> ${data.group.plan_type === 'week' ? 'Недельный' : 'Месячный'}</p>
-                <p><strong>Код приглашения:</strong> ${data.group.invite_code}</p>
+                <p><strong>Код приглашения:</strong> <code>${data.group.invite_code}</code></p>
             </div>
             <div class="members-list">
                 <h4>Участники (${data.members.length})</h4>
@@ -359,7 +410,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function renderAnalytics(data) {
-        // Общая статистика
         document.getElementById('stat-days-analytics').textContent = data.leader_stats?.total_workout_days || 0;
         document.getElementById('stat-weeks-analytics').textContent = Math.floor((data.leader_stats?.total_workout_days || 0) / 7);
         document.getElementById('stat-total-analytics').textContent = data.leader_stats?.total_workout_days || 0;
@@ -372,12 +422,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const isLight = this.checked;
         document.body.classList.toggle('light-theme', isLight);
         localStorage.setItem('theme', isLight ? 'light' : 'dark');
-        showNotification('Тема изменена');
+        showNotification('🎨 Тема изменена');
     });
 
     document.getElementById('timezone-select').addEventListener('change', function() {
         localStorage.setItem('timezone', this.value);
-        showNotification('Часовой пояс сохранен');
+        showNotification('🌍 Часовой пояс сохранен');
     });
 
     // План тренировок
@@ -390,7 +440,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 appData.weekDates = data.weekDates;
                 appData.weekNumber = data.weekNumber;
                 renderWeekPlan();
-                loadStats();
             }
         } catch (error) {
             console.error('Error loading plan:', error);
@@ -406,13 +455,23 @@ document.addEventListener('DOMContentLoaded', () => {
             weekInfo.textContent = `Неделя ${appData.weekNumber} • ${formatWeekRange(appData.weekDates)}`;
         }
 
+        // Создаем 7 дней если плана нет
+        if (appData.plan.length === 0) {
+            appData.plan = Array(7).fill().map((_, index) => ({
+                day_of_week: index,
+                is_rest_day: false,
+                notification_time: '19:00',
+                exercises: []
+            }));
+        }
+
         appData.plan.forEach((dayData, index) => {
             const dayCard = document.createElement('div');
             dayCard.className = `day-card ${dayData.is_rest_day ? 'rest-day' : ''}`;
             
             const exerciseCountText = dayData.is_rest_day 
                 ? '🏖️ Выходной' 
-                : `${dayData.exercises.length} упр.`;
+                : `${dayData.exercises ? dayData.exercises.length : 0} упр.`;
 
             const dateDisplay = appData.weekDates && appData.weekDates[index] 
                 ? formatDate(appData.weekDates[index])
@@ -426,7 +485,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                     <div class="day-date">${dateDisplay}</div>
                 </div>
-                ${!dayData.is_rest_day && dayData.exercises.length > 0 ? `
+                ${!dayData.is_rest_day && dayData.exercises && dayData.exercises.length > 0 ? `
                     <div class="day-exercises-preview">
                         ${dayData.exercises.slice(0, 2).map(ex => 
                             `<span class="exercise-preview">${ex.name}</span>`
@@ -444,6 +503,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // Модальное окно дня
     function openDayModal(dayIndex) {
         currentEditingDayIndex = dayIndex;
+        
+        // Убедимся что план существует
+        if (!appData.plan[dayIndex]) {
+            appData.plan[dayIndex] = {
+                day_of_week: dayIndex,
+                is_rest_day: false,
+                notification_time: '19:00',
+                exercises: []
+            };
+        }
+        
         const dayData = appData.plan[dayIndex];
 
         const dateDisplay = appData.weekDates && appData.weekDates[dayIndex] 
@@ -452,15 +522,10 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('modal-day-title').textContent = 
             `${dayNames[dayIndex]} • ${dateDisplay}`;
 
-        renderExercisesList(dayData.exercises);
+        renderExercisesList(dayData.exercises || []);
         
         const restDayToggle = document.getElementById('rest-day-toggle');
-        const notificationSettings = document.getElementById('notification-settings');
-        
-        restDayToggle.checked = dayData.is_rest_day;
-        notificationSettings.style.display = dayData.is_rest_day ? 'none' : 'block';
-
-        document.getElementById('notification-time').value = dayData.notification_time || '19:00';
+        restDayToggle.checked = dayData.is_rest_day || false;
 
         openModal(document.getElementById('day-modal'));
     }
@@ -469,7 +534,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const listContainer = document.getElementById('exercises-list');
         listContainer.innerHTML = '';
         
-        if (exercises.length === 0) {
+        if (!exercises || exercises.length === 0) {
             listContainer.innerHTML = '<p style="text-align: center; padding: 20px; color: var(--text-secondary);">Упражнений пока нет</p>';
             return;
         }
@@ -490,40 +555,45 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Удаление упражнения
     window.deleteExercise = function(exerciseIndex) {
+        if (currentEditingDayIndex === null || !appData.plan[currentEditingDayIndex].exercises) return;
+        
         appData.plan[currentEditingDayIndex].exercises.splice(exerciseIndex, 1);
         renderExercisesList(appData.plan[currentEditingDayIndex].exercises);
         savePlan();
     };
 
-    // Сохранение плана
+    // Сохранение плана - исправленная версия
     async function savePlan() {
         try {
+            console.log('Saving plan:', appData.plan);
+            
             const response = await fetch(`${BACKEND_URL}/api/plan`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ plan: appData.plan })
             });
             
+            const result = await response.json();
+            
             if (response.ok) {
-                showNotification('План сохранен!');
+                showNotification('✅ План сохранен!');
                 renderWeekPlan();
+            } else {
+                showNotification(result.error || '❌ Ошибка при сохранении', 'error');
             }
         } catch (error) {
             console.error('Error saving plan:', error);
-            showNotification('Ошибка при сохранении', 'error');
+            showNotification('❌ Ошибка при сохранении', 'error');
         }
     }
 
-    // Обработчики форм
+    // Обработчики форм - исправленные
     document.getElementById('rest-day-toggle').addEventListener('change', function() {
         if (currentEditingDayIndex === null) return;
         
         const isRestDay = this.checked;
         appData.plan[currentEditingDayIndex].is_rest_day = isRestDay;
         
-        const notificationSettings = document.getElementById('notification-settings');
-        notificationSettings.style.display = isRestDay ? 'none' : 'block';
-
         // Если день стал выходным, очищаем упражнения
         if (isRestDay) {
             appData.plan[currentEditingDayIndex].exercises = [];
@@ -533,39 +603,41 @@ document.addEventListener('DOMContentLoaded', () => {
         savePlan();
     });
 
-    document.getElementById('save-notification-settings').addEventListener('click', () => {
-        if (currentEditingDayIndex === null) return;
-
-        const notificationTime = document.getElementById('notification-time').value;
-        appData.plan[currentEditingDayIndex].notification_time = notificationTime;
-        
-        savePlan();
-        showNotification('Настройки уведомлений сохранены');
-    });
-
     document.getElementById('add-exercise-form').addEventListener('submit', (e) => {
         e.preventDefault();
         
-        const name = document.getElementById('ex-name').value;
+        const name = document.getElementById('ex-name').value.trim();
         const sets = document.getElementById('ex-sets').value;
-        const reps = document.getElementById('ex-reps').value;
+        const reps = document.getElementById('ex-reps').value.trim();
 
-        if (name && sets && reps && currentEditingDayIndex !== null) {
-            const newExercise = { 
-                name, 
-                sets: parseInt(sets), 
-                reps,
-                rest_between_sets: 60,
-                rest_after_exercise: 60
-            };
-            
-            appData.plan[currentEditingDayIndex].exercises.push(newExercise);
-            renderExercisesList(appData.plan[currentEditingDayIndex].exercises);
-            savePlan();
-            
-            e.target.reset();
-            showNotification('Упражнение добавлено');
+        if (!name || !sets || !reps || currentEditingDayIndex === null) {
+            showNotification('❌ Заполните все поля', 'error');
+            return;
         }
+
+        // Убедимся что массив упражнений существует
+        if (!appData.plan[currentEditingDayIndex].exercises) {
+            appData.plan[currentEditingDayIndex].exercises = [];
+        }
+
+        const newExercise = { 
+            name, 
+            sets: parseInt(sets), 
+            reps
+        };
+        
+        appData.plan[currentEditingDayIndex].exercises.push(newExercise);
+        renderExercisesList(appData.plan[currentEditingDayIndex].exercises);
+        savePlan();
+        
+        e.target.reset();
+        showNotification('✅ Упражнение добавлено');
+    });
+
+    // Кнопка начала тренировки
+    document.getElementById('start-workout-btn').addEventListener('click', function() {
+        showNotification('🏋️ Тренировка начата! Отмечайте выполненные упражнения.', 'success');
+        // Здесь можно добавить логику отслеживания выполнения
     });
 
     // Закрытие модальных окон
@@ -577,32 +649,14 @@ document.addEventListener('DOMContentLoaded', () => {
         closeModal(document.getElementById('settings-modal'));
     });
 
-    // Статистика
-    async function loadStats() {
-        try {
-            // Заглушка для статистики - в реальном приложении здесь будет API вызов
-            const completedThisWeek = appData.plan.reduce((count, day) => {
-                return count + (day.exercises.length > 0 ? 1 : 0);
-            }, 0);
-            
-            const totalCompleted = completedThisWeek * appData.weekNumber;
-            
-            appData.stats = {
-                completedThisWeek,
-                totalCompleted,
-                currentStreak: 0
-            };
-            
-            renderStats();
-        } catch (error) {
-            console.error('Error loading stats:', error);
-        }
-    }
-
-    function renderStats() {
-        document.getElementById('stat-days').textContent = appData.stats.completedThisWeek || 0;
-        document.getElementById('stat-weeks').textContent = Math.floor((appData.stats.totalCompleted || 0) / 7);
-    }
+    // Закрытие модальных окон по клику на фон
+    document.querySelectorAll('.modal').forEach(modal => {
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                closeModal(modal);
+            }
+        });
+    });
 
     // Инициализация
     function initApp() {

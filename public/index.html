@@ -85,12 +85,12 @@
             <div id="join-group-tab" class="tab-content">
                 <div class="welcome-card">
                     <h3>Присоединиться к группе</h3>
-                    <p>Введите пригласительный код:</p>
+                    <p>Введите пригласительный код, который вам отправили:</p>
                     <form id="join-group-form" class="group-form">
                         <div class="form-group">
-                            <input type="text" id="invite-code" placeholder="Например: A1B2C3D4" required>
+                            <input type="text" id="invite-code" placeholder="Введите код (например: A1B2C3D4)" required>
                         </div>
-                        <button type="submit" class="btn-primary">Присоединиться</button>
+                        <button type="submit" class="btn-primary">Присоединиться к группе</button>
                     </form>
                 </div>
             </div>
@@ -148,24 +148,24 @@
                 <h2>📊 Моя статистика</h2>
             </div>
             
-            <div class="stats-grid">
-                <div class="stat-card">
+            <div class="stats-grid-compact">
+                <div class="stat-card-compact">
                     <div class="stat-number" id="stat-days-analytics">0</div>
-                    <div class="stat-label">Дней на этой неделе</div>
+                    <div class="stat-label">Дней на неделе</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card-compact">
                     <div class="stat-number" id="stat-weeks-analytics">0</div>
                     <div class="stat-label">Завершено недель</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card-compact">
                     <div class="stat-number" id="stat-total-analytics">0</div>
                     <div class="stat-label">Всего тренировок</div>
                 </div>
-                <div class="stat-card">
+                <div class="stat-card-compact">
                     <div class="stat-number" id="stat-streak-analytics">0</div>
                     <div class="stat-label">Текущий стрик</div>
                 </div>
-                <div class="stat-card large">
+                <div class="stat-card-wide">
                     <div class="stat-number" id="stat-best-streak">0</div>
                     <div class="stat-label">Лучший стрик</div>
                 </div>
@@ -190,36 +190,43 @@
                     </label>
                 </div>
 
-                <div id="notification-settings" class="settings-section">
-                    <h4>🔔 Настройки уведомлений</h4>
-                    <div class="form-group">
-                        <label>Время уведомления:</label>
-                        <input type="time" id="notification-time" value="19:00">
-                    </div>
-                    <button id="save-notification-settings" class="btn-primary">Сохранить время</button>
-                </div>
-
                 <div class="exercises-section">
                     <h4>Упражнения</h4>
                     <div id="exercises-list" class="exercises-list"></div>
                 </div>
 
                 <form id="add-exercise-form" class="add-exercise-form">
-                    <h4>Добавить упражнение</h4>
-                    <div class="form-group">
-                        <label for="ex-name">Название упражнения</label>
-                        <input type="text" id="ex-name" placeholder="Например: Отжимания" required>
+                    <h4>➕ Добавить новое упражнение</h4>
+                    
+                    <div class="form-group-vertical">
+                        <label for="ex-name">📝 Название упражнения</label>
+                        <input type="text" id="ex-name" placeholder="Например: Отжимания, Приседания..." required>
                     </div>
-                    <div class="form-group">
-                        <label for="ex-sets">Количество подходов</label>
-                        <input type="number" id="ex-sets" placeholder="3" min="1" required>
+                    
+                    <div class="form-row">
+                        <div class="form-group-vertical">
+                            <label for="ex-sets">🔄 Подходы</label>
+                            <input type="number" id="ex-sets" placeholder="3" min="1" max="10" required>
+                        </div>
+                        
+                        <div class="form-group-vertical">
+                            <label for="ex-reps">⚡ Повторения/Время</label>
+                            <input type="text" id="ex-reps" placeholder="10-12 или 30сек" required>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="ex-reps">Повторения или время</label>
-                        <input type="text" id="ex-reps" placeholder="10 или 30 секунд" required>
-                    </div>
-                    <button type="submit" class="btn-primary">Добавить упражнение</button>
+                    
+                    <button type="submit" class="btn-primary" style="margin-top: 15px;">
+                        ✅ Добавить упражнение
+                    </button>
                 </form>
+
+                <div class="workout-actions" style="margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border-color);">
+                    <h4>🎯 Начать тренировку</h4>
+                    <p style="margin-bottom: 15px; color: var(--text-secondary);">Отметьте выполнение упражнений</p>
+                    <button id="start-workout-btn" class="btn-primary" style="width: 100%;">
+                        🏁 Начать тренировку сегодня
+                    </button>
+                </div>
             </div>
         </div>
     </div>

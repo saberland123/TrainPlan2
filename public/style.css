@@ -1,4 +1,4 @@
-/* Modern CSS with Light/Dark Theme - ПОЛНАЯ ВЕРСИЯ */
+/* Modern CSS with Light/Dark Theme */
 :root {
     /* Dark Theme (default) */
     --primary-bg: #0f0f0f;
@@ -14,7 +14,7 @@
     --border-radius: 16px;
     --border-radius-sm: 12px;
     --shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    --transition: all 0.2s ease;
+    --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .light-theme {
@@ -22,12 +22,13 @@
     --secondary-bg: #f8f9fa;
     --card-bg: #ffffff;
     --accent-primary: #00c853;
-    --accent-secondary: #78909c;
+    --accent-secondary: #4caf50;
     --text-primary: #2c3e50;
     --text-secondary: #546e7a;
     --success: #00c853;
     --warning: #ff9800;
     --danger: #f44336;
+    --border-color: #e0e0e0;
     --shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
 
@@ -53,13 +54,13 @@ body {
 }
 
 @keyframes slideIn {
-    from { transform: translateX(-100%); }
+    from { transform: translateX(100%); }
     to { transform: translateX(0); }
 }
 
 @keyframes scaleIn {
-    from { transform: scale(0.95); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
+    from { transform: translate(-50%, -50%) scale(0.8); opacity: 0; }
+    to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
 }
 
 /* Контейнеры */
@@ -115,16 +116,16 @@ body {
     grid-template-columns: 1fr 1fr;
     gap: 12px;
     margin: 24px auto;
-    max-width: 400px; /* Ограничиваем ширину */
+    max-width: 400px;
 }
 
 .menu-button {
     background: linear-gradient(135deg, var(--accent-primary), #0056b3);
     color: white;
     border: none;
-    padding: 16px 12px; /* Уменьшил padding */
+    padding: 16px 12px;
     border-radius: var(--border-radius-sm);
-    font-size: 15px; /* Чуть меньший шрифт */
+    font-size: 15px;
     font-weight: 600;
     cursor: pointer;
     transition: var(--transition);
@@ -133,7 +134,7 @@ body {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    min-height: 60px; /* Фиксированная высота */
+    min-height: 60px;
 }
 
 .light-theme .menu-button {
@@ -144,17 +145,17 @@ body {
     transform: scale(0.98);
 }
 
-/* Action buttons тоже уменьшены */
+/* Action buttons */
 .action-buttons {
     display: flex;
     flex-direction: column;
     gap: 10px;
     margin: 20px auto;
-    max-width: 400px; /* Ограничиваем ширину */
+    max-width: 400px;
 }
 
 .btn-primary, .btn-secondary {
-    padding: 14px 16px; /* Уменьшил padding */
+    padding: 14px 16px;
     border-radius: var(--border-radius-sm);
     font-size: 15px;
     cursor: pointer;
@@ -247,18 +248,29 @@ body {
     background: rgba(0, 200, 83, 0.1);
 }
 
-/* Статистика */
-.quick-stats {
+/* Улучшенная статистика на экране аналитики */
+.stats-grid-compact {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 12px;
-    margin: 20px auto;
-    max-width: 400px;
+    margin: 20px 0;
 }
 
-.stat-card {
-    text-align: center;
+.stat-card-compact {
+    background: var(--card-bg);
+    border-radius: var(--border-radius);
     padding: 15px;
+    text-align: center;
+    border: 1px solid var(--border-color);
+}
+
+.stat-card-wide {
+    grid-column: span 2;
+    background: var(--card-bg);
+    border-radius: var(--border-radius);
+    padding: 20px;
+    text-align: center;
+    border: 1px solid var(--border-color);
 }
 
 .stat-number {
@@ -273,19 +285,7 @@ body {
     font-size: 12px;
 }
 
-/* Улучшенная статистика на экране аналитики */
-.stats-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin: 20px 0;
-}
-
-.stat-card.large {
-    grid-column: span 2;
-}
-
-/* Модальные окна */
+/* Модальные окна - ИСПРАВЛЕННЫЕ БЕЗ ЛАГОВ */
 .modal {
     display: none;
     position: fixed;
@@ -295,21 +295,32 @@ body {
     height: 100%;
     background: rgba(0, 0, 0, 0.8);
     z-index: 1000;
-    animation: fadeIn 0.2s ease-out;
+    opacity: 0;
+    transition: opacity 0.3s ease-out;
+}
+
+.modal.active {
+    display: flex;
+    opacity: 1;
 }
 
 .modal-content {
     position: absolute;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%) scale(0.9);
     background: var(--card-bg);
     border-radius: var(--border-radius);
     width: 95%;
     max-width: 500px;
     max-height: 90vh;
     overflow-y: auto;
-    animation: scaleIn 0.2s ease-out;
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: transform;
+}
+
+.modal.active .modal-content {
+    transform: translate(-50%, -50%) scale(1);
 }
 
 .modal-header {
@@ -318,6 +329,8 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    position: relative;
+    z-index: 1;
 }
 
 .light-theme .modal-header {
@@ -331,6 +344,12 @@ body {
     font-size: 24px;
     cursor: pointer;
     padding: 4px;
+    transition: var(--transition);
+}
+
+.close-btn:hover {
+    color: var(--text-primary);
+    transform: scale(1.1);
 }
 
 /* Улучшенная форма */
@@ -369,9 +388,44 @@ body {
 .form-group textarea:focus {
     border-color: var(--accent-primary);
     outline: none;
+    transform: translateY(-1px);
 }
 
-/* Уведомления */
+/* Новая вертикальная форма */
+.form-group-vertical {
+    margin-bottom: 20px;
+}
+
+.form-group-vertical label {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.form-group-vertical input {
+    width: 100%;
+    background: var(--secondary-bg);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--border-radius-sm);
+    padding: 16px;
+    color: var(--text-primary);
+    font-size: 16px;
+    transition: var(--transition);
+}
+
+.light-theme .form-group-vertical input {
+    border: 2px solid rgba(0, 0, 0, 0.1);
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+}
+
+/* Уведомления - улучшенные */
 .notification {
     position: fixed;
     top: 20px;
@@ -382,7 +436,11 @@ body {
     border-radius: var(--border-radius);
     box-shadow: var(--shadow);
     z-index: 10000;
-    animation: slideIn 0.3s ease-out;
+    max-width: 300px;
+    word-wrap: break-word;
+    opacity: 0;
+    transform: translateY(-20px);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .notification.error {
@@ -558,16 +616,11 @@ input[type="checkbox"]:checked + .toggle-slider:after {
         max-width: 100%;
     }
     
-    .quick-stats {
-        grid-template-columns: 1fr;
-        max-width: 100%;
-    }
-    
-    .stats-grid {
+    .stats-grid-compact {
         grid-template-columns: 1fr;
     }
     
-    .stat-card.large {
+    .stat-card-wide {
         grid-column: span 1;
     }
     
@@ -576,6 +629,10 @@ input[type="checkbox"]:checked + .toggle-slider:after {
         height: 100%;
         max-height: 100%;
         border-radius: 0;
+    }
+    
+    .form-row {
+        grid-template-columns: 1fr;
     }
 }
 
@@ -591,4 +648,51 @@ input[type="checkbox"]:checked + .toggle-slider:after {
 ::-webkit-scrollbar-thumb {
     background: var(--accent-primary);
     border-radius: 3px;
+}
+
+/* Улучшения для модального тела */
+.modal-body {
+    padding: 20px;
+    max-height: calc(90vh - 80px);
+    overflow-y: auto;
+}
+
+/* Улучшения для упражнений */
+.exercise-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px;
+    background: var(--secondary-bg);
+    border-radius: var(--border-radius-sm);
+    margin-bottom: 8px;
+    transition: var(--transition);
+}
+
+.exercise-item:hover {
+    transform: translateY(-1px);
+}
+
+.exercise-info {
+    flex: 1;
+}
+
+.exercise-info strong {
+    display: block;
+    margin-bottom: 4px;
+}
+
+.delete-btn {
+    background: none;
+    border: none;
+    color: var(--danger);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: var(--transition);
+}
+
+.delete-btn:hover {
+    background: var(--danger);
+    color: white;
 }

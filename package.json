@@ -12,7 +12,6 @@
     "telegraf": "^4.16.3",
     "sqlite3": "^5.1.6",
     "node-schedule": "^2.1.1",
-    "path": "^0.12.7",
     "uuid": "^9.0.0"
   },
   "keywords": ["telegram", "bot", "training", "fitness", "social"],
