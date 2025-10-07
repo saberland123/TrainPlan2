@@ -1,4 +1,4 @@
-// server.js - С ГРУППОВЫМИ ТРЕНИРОВКАМИ И ЛИДЕРБОРДОМ
+// server.js - ПОЛНАЯ ВЕРСИЯ СО ВСЕМИ ФУНКЦИЯМИ
 const express = require('express');
 const { Telegraf, Markup } = require('telegraf');
 const sqlite3 = require('sqlite3').verbose();
@@ -36,7 +36,7 @@ const db = new sqlite3.Database(':memory:', (err) => {
 });
 
 function initDatabase() {
-    // Существующие таблицы...
+    // Таблица пользователей
     db.run(`CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         telegram_id INTEGER UNIQUE,
@@ -45,6 +45,7 @@ function initDatabase() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`);
 
+    // Таблица планов тренировок
     db.run(`CREATE TABLE IF NOT EXISTS training_plans (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
@@ -55,6 +56,7 @@ function initDatabase() {
         FOREIGN KEY(user_id) REFERENCES users(id)
     )`);
 
+    // Таблица упражнений
     db.run(`CREATE TABLE IF NOT EXISTS exercises (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         plan_id INTEGER,
@@ -67,6 +69,7 @@ function initDatabase() {
         FOREIGN KEY(plan_id) REFERENCES training_plans(id)
     )`);
 
+    // Таблица выполненных тренировок
     db.run(`CREATE TABLE IF NOT EXISTS completed_workouts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
@@ -78,11 +81,23 @@ function initDatabase() {
         FOREIGN KEY(user_id) REFERENCES users(id)
     )`);
 
+    // Таблица текущей недели
     db.run(`CREATE TABLE IF NOT EXISTS current_week (
         id INTEGER PRIMARY KEY CHECK (id = 1),
         week_start DATE,
         week_number INTEGER,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`);
+
+    // Таблица сессий тренировок
+    db.run(`CREATE TABLE IF NOT EXISTS workout_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        day_of_week INTEGER,
+        current_exercise_index INTEGER DEFAULT 0,
+        exercises_data TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(user_id) REFERENCES users(id)
     )`);
 
     // НОВЫЕ ТАБЛИЦЫ ДЛЯ ГРУППОВЫХ ТРЕНИРОВОК
@@ -92,7 +107,7 @@ function initDatabase() {
         description TEXT,
         creator_id INTEGER,
         invite_code TEXT UNIQUE,
-        plan_type TEXT DEFAULT 'week', -- 'week' или 'month'
+        plan_type TEXT DEFAULT 'week',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         is_active BOOLEAN DEFAULT 1,
         FOREIGN KEY(creator_id) REFERENCES users(id)
@@ -114,7 +129,7 @@ function initDatabase() {
     db.run(`CREATE TABLE IF NOT EXISTS group_workouts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         group_id INTEGER,
-        day_of_week INTEGER, -- 0-6 для недели, 1-31 для месяца
+        day_of_week INTEGER,
         exercise_name TEXT NOT NULL,
         sets INTEGER NOT NULL,
         reps TEXT NOT NULL,
@@ -154,16 +169,468 @@ function initDatabase() {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER,
         share_code TEXT UNIQUE,
-        shared_data TEXT, -- JSON с результатами
+        shared_data TEXT,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         expires_at DATETIME,
         FOREIGN KEY(user_id) REFERENCES users(id)
     )`);
 }
 
-// [Остальные существующие функции...]
+// Функция для получения дат текущей недели
+function getCurrentWeekDates() {
+    const now = new Date();
+    const currentDay = now.getDay();
+    const startOfWeek = new Date(now);
+    
+    const diff = currentDay === 0 ? -6 : 1 - currentDay;
+    startOfWeek.setDate(now.getDate() + diff);
+    startOfWeek.setHours(0, 0, 0, 0);
 
-// НОВЫЕ ФУНКЦИИ ДЛЯ ГРУППОВЫХ ТРЕНИРОВОК
+    const weekDates = [];
+    for (let i = 0; i < 7; i++) {
+        const date = new Date(startOfWeek);
+        date.setDate(startOfWeek.getDate() + i);
+        weekDates.push(date);
+    }
+
+    return weekDates;
+}
+
+// Функция для получения номера недели в году
+function getWeekNumber(date) {
+    const firstDayOfYear = new Date(date.getFullYear(), 0, 1);
+    const pastDaysOfYear = (date - firstDayOfYear) / 86400000;
+    return Math.ceil((pastDaysOfYear + firstDayOfYear.getDay() + 1) / 7);
+}
+
+// Обновление текущей недели в базе данных
+function updateCurrentWeek() {
+    const weekDates = getCurrentWeekDates();
+    const weekStart = weekDates[0];
+    const weekNumber = getWeekNumber(weekStart);
+
+    db.run(`INSERT OR REPLACE INTO current_week (id, week_start, week_number) VALUES (1, ?, ?)`, 
+        [weekStart.toISOString().split('T')[0], weekNumber], 
+        (err) => {
+            if (err) console.error('Error updating week:', err);
+            else console.log(`📅 Week updated: ${weekStart.toDateString()} (Week ${weekNumber})`);
+        }
+    );
+
+    return { weekDates, weekNumber };
+}
+
+// Регистрация пользователя
+async function registerUser(telegramId, username, firstName) {
+    return new Promise((resolve, reject) => {
+        db.run(`INSERT OR IGNORE INTO users (telegram_id, username, first_name) VALUES (?, ?, ?)`,
+            [telegramId, username, firstName],
+            function(err) {
+                if (err) reject(err);
+                else resolve(this.lastID);
+            }
+        );
+    });
+}
+
+// Создание базового плана тренировок
+function createDefaultPlan(userId) {
+    const defaultExercises = [
+        { day: 0, exercises: [
+            { name: "Отжимания", sets: 5, reps: "5", rest_between_sets: 60, rest_after_exercise: 60 },
+            { name: "Жим гантелей", sets: 3, reps: "10-12", rest_between_sets: 60, rest_after_exercise: 60 }
+        ], isRestDay: false },
+        { day: 1, exercises: [
+            { name: "Приседания", sets: 4, reps: "10-12", rest_between_sets: 90, rest_after_exercise: 60 },
+            { name: "Выпады", sets: 3, reps: "10 на каждую ногу", rest_between_sets: 60, rest_after_exercise: 60 }
+        ], isRestDay: false },
+        { day: 2, exercises: [
+            { name: "Подтягивания", sets: 4, reps: "6-8", rest_between_sets: 60, rest_after_exercise: 60 },
+            { name: "Тяга гантели", sets: 3, reps: "10-12", rest_between_sets: 60, rest_after_exercise: 60 }
+        ], isRestDay: false },
+        { day: 3, exercises: [
+            { name: "Жим гантелей сидя", sets: 4, reps: "10-12", rest_between_sets: 60, rest_after_exercise: 60 },
+            { name: "Махи гантелями", sets: 3, reps: "12-15", rest_between_sets: 60, rest_after_exercise: 60 }
+        ], isRestDay: false },
+        { day: 4, exercises: [
+            { name: "Пресс скручивания", sets: 3, reps: "15-20", rest_between_sets: 45, rest_after_exercise: 45 },
+            { name: "Планка", sets: 3, reps: "60 секунд", rest_between_sets: 45, rest_after_exercise: 45 }
+        ], isRestDay: false },
+        { day: 5, exercises: [], isRestDay: true },
+        { day: 6, exercises: [], isRestDay: true }
+    ];
+
+    defaultExercises.forEach(dayPlan => {
+        db.run(`INSERT INTO training_plans (user_id, day_of_week, is_rest_day, notification_time, notification_interval) 
+                VALUES (?, ?, ?, ?, ?)`,
+            [userId, dayPlan.day, dayPlan.isRestDay || false, '19:00', 10],
+            function(err) {
+                if (err) return console.error(err);
+                
+                const planId = this.lastID;
+                dayPlan.exercises.forEach((exercise, index) => {
+                    db.run(`INSERT INTO exercises (plan_id, name, sets, reps, rest_between_sets, rest_after_exercise, order_index) 
+                            VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                        [planId, exercise.name, exercise.sets, exercise.reps, exercise.rest_between_sets, exercise.rest_after_exercise, index]);
+                });
+            }
+        );
+    });
+}
+
+// Система уведомлений через бота
+async function scheduleNotifications(userId) {
+    // Отменяем старые уведомления
+    if (jobs[userId]) {
+        jobs[userId].forEach(job => job.cancel());
+        delete jobs[userId];
+    }
+
+    jobs[userId] = [];
+
+    db.all(`SELECT * FROM training_plans WHERE user_id = ?`, [userId], (err, plans) => {
+        if (err) return console.error(err);
+
+        plans.forEach(plan => {
+            if (plan.is_rest_day || !plan.notification_time) return;
+
+            const [hours, minutes] = plan.notification_time.split(':');
+            
+            // Получаем упражнения для этого дня
+            db.all(`SELECT * FROM exercises WHERE plan_id = ? ORDER BY order_index`, [plan.id], (err, exercises) => {
+                if (err) return console.error(err);
+
+                if (exercises.length === 0) return;
+
+                // Планируем уведомление на заданное время
+                const rule = new schedule.RecurrenceRule();
+                rule.dayOfWeek = plan.day_of_week;
+                rule.hour = parseInt(hours);
+                rule.minute = parseInt(minutes);
+                rule.tz = 'Europe/Moscow';
+
+                const job = schedule.scheduleJob(rule, async () => {
+                    await startWorkoutSession(userId, plan.day_of_week, exercises);
+                });
+
+                jobs[userId].push(job);
+                console.log(`⏰ Scheduled notification for user ${userId} on day ${plan.day_of_week} at ${plan.notification_time}`);
+            });
+        });
+    });
+}
+
+// Запуск сессии тренировки через бота
+async function startWorkoutSession(userId, dayOfWeek, exercises) {
+    const dayNames = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресеньe"];
+    
+    try {
+        // Сохраняем сессию в базу
+        db.run(`INSERT INTO workout_sessions (user_id, day_of_week, exercises_data, current_exercise_index) VALUES (?, ?, ?, ?)`,
+            [userId, dayOfWeek, JSON.stringify(exercises), 0],
+            async function(err) {
+                if (err) {
+                    console.error('Error saving workout session:', err);
+                    return;
+                }
+
+                const sessionId = this.lastID;
+                await sendExerciseToUser(userId, sessionId, dayOfWeek, exercises, 0);
+            }
+        );
+    } catch (error) {
+        console.error('Error starting workout session:', error);
+    }
+}
+
+// Отправка упражнения пользователю через бота
+async function sendExerciseToUser(userId, sessionId, dayOfWeek, exercises, exerciseIndex) {
+    const dayNames = ["Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота", "Воскресеньe"];
+    
+    if (exerciseIndex >= exercises.length) {
+        await bot.telegram.sendMessage(userId, 
+            `🎉 **Тренировка на ${dayNames[dayOfWeek]} завершена!**\n\nОтличная работа! 💪\nВсе упражнения выполнены!`,
+            { parse_mode: 'Markdown' }
+        );
+        
+        // Удаляем сессию
+        db.run(`DELETE FROM workout_sessions WHERE id = ?`, [sessionId]);
+        return;
+    }
+
+    const exercise = exercises[exerciseIndex];
+    
+    try {
+        await bot.telegram.sendMessage(userId,
+            `🏋️ **${dayNames[dayOfWeek]} - Упражнение ${exerciseIndex + 1}/${exercises.length}**\n\n` +
+            `**${exercise.name}**\n` +
+            `📊 ${exercise.sets} подход(а) × ${exercise.reps}\n` +
+            `⏱️ Отдых между подходами: ${exercise.rest_between_sets} сек\n` +
+            `🔄 Отдых после упражнения: ${exercise.rest_after_exercise} сек\n\n` +
+            `Нажми "✅ Завершил" когда выполнишь все подходы`,
+            {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: [[
+                        { text: '✅ Завершил упражнение', callback_data: `complete_${sessionId}_${exerciseIndex}` }
+                    ]]
+                }
+            }
+        );
+    } catch (error) {
+        console.error('Error sending message to user:', error);
+    }
+}
+
+// Команды бота
+bot.start(async (ctx) => {
+    const user = ctx.from;
+    await registerUser(user.id, user.username, user.first_name);
+    
+    await ctx.reply(
+        `👋 Привет, ${user.first_name}!\n\n` +
+        `Я твой персональный тренер! 🏋️\n\n` +
+        `Открой Web App чтобы настроить свой план тренировок:`,
+        Markup.keyboard([
+            [Markup.button.webApp('📅 Открыть TrainPlan', `https://${process.env.RENDER_EXTERNAL_URL || 'localhost:3000'}`)]
+        ]).resize()
+    );
+});
+
+// Обработчик завершения упражнения
+bot.on('callback_query', async (ctx) => {
+    const userId = ctx.from.id;
+    const callbackData = ctx.callbackQuery.data;
+
+    if (callbackData.startsWith('complete_')) {
+        const parts = callbackData.replace('complete_', '').split('_');
+        const sessionId = parseInt(parts[0]);
+        const exerciseIndex = parseInt(parts[1]);
+
+        await ctx.answerCbQuery();
+
+        // Получаем данные сессии
+        db.get(`SELECT * FROM workout_sessions WHERE id = ? AND user_id = ?`, [sessionId, userId], async (err, session) => {
+            if (err || !session) {
+                await ctx.editMessageText('❌ Сессия не найдена');
+                return;
+            }
+
+            const exercises = JSON.parse(session.exercises_data);
+            const exercise = exercises[exerciseIndex];
+            const today = new Date().toISOString().split('T')[0];
+            
+            // Сохраняем в базу выполненное упражнение
+            db.run(`INSERT INTO completed_workouts (user_id, exercise_name, completed_date, sets, reps) VALUES (?, ?, ?, ?, ?)`, 
+                [userId, exercise.name, today, exercise.sets, exercise.reps]);
+
+            await ctx.editMessageText(
+                `✅ **${exercise.name} завершено!**\n\n` +
+                `Отлично! ${exercise.sets} подход(а) × ${exercise.reps} выполнено!\n` +
+                `Отдых ${exercise.rest_after_exercise} секунд до следующего упражнения...`,
+                { parse_mode: 'Markdown' }
+            );
+
+            // Обновляем лидерборд
+            updateLeaderboard(userId, exercise);
+
+            // Обновляем индекс текущего упражнения
+            const nextIndex = exerciseIndex + 1;
+            db.run(`UPDATE workout_sessions SET current_exercise_index = ? WHERE id = ?`, [nextIndex, sessionId]);
+
+            // Ждем и отправляем следующее упражнение
+            setTimeout(async () => {
+                await sendExerciseToUser(userId, sessionId, session.day_of_week, exercises, nextIndex);
+            }, (exercise.rest_after_exercise || 60) * 1000);
+        });
+    }
+});
+
+// Обновление лидерборда при завершении тренировки
+function updateLeaderboard(userId, exercise) {
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Проверяем, достаточно ли интенсивная тренировка для зачета
+    const sets = parseInt(exercise.sets) || 0;
+    const reps = parseInt(exercise.reps) || 0;
+    
+    // Условия для зачета тренировочного дня:
+    // Минимум 2 подхода И минимум 5 повторений (или время для кардио)
+    const isValidWorkout = sets >= 2 && (reps >= 5 || exercise.reps.includes('сек') || exercise.reps.includes('мин'));
+    
+    if (!isValidWorkout) return;
+    
+    db.get(`SELECT * FROM leaderboard WHERE user_id = ?`, [userId], (err, userStats) => {
+        if (err) return;
+        
+        if (!userStats) {
+            // Создаем новую запись
+            db.run(`INSERT INTO leaderboard (user_id, total_workout_days, current_streak, longest_streak, last_workout_date) 
+                    VALUES (?, 1, 1, 1, ?)`, [userId, today]);
+        } else {
+            let newCurrentStreak = userStats.current_streak;
+            let newTotalDays = userStats.total_workout_days;
+            
+            // Проверяем, является ли сегодняшняя тренировка продолжением стрика
+            const lastWorkout = new Date(userStats.last_workout_date);
+            const todayDate = new Date(today);
+            const diffTime = Math.abs(todayDate - lastWorkout);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            if (diffDays === 1) {
+                // Продолжение стрика
+                newCurrentStreak += 1;
+            } else if (diffDays > 1) {
+                // Разрыв стрика
+                newCurrentStreak = 1;
+            }
+            // Если diffDays === 0 - тренировка уже засчитана сегодня
+            
+            if (diffDays > 0) {
+                newTotalDays += 1;
+            }
+            
+            const newLongestStreak = Math.max(newCurrentStreak, userStats.longest_streak);
+            
+            db.run(`UPDATE leaderboard SET total_workout_days = ?, current_streak = ?, longest_streak = ?, last_workout_date = ? WHERE user_id = ?`,
+                [newTotalDays, newCurrentStreak, newLongestStreak, today, userId]);
+        }
+    });
+}
+
+// API Endpoints
+
+// Получение плана тренировок с датами
+app.get('/api/plan', (req, res) => {
+    const userId = 1; // Временно фиксированный ID
+
+    // Обновляем текущую неделю
+    const { weekDates, weekNumber } = updateCurrentWeek();
+
+    db.all(`SELECT * FROM training_plans WHERE user_id = ? ORDER BY day_of_week`, [userId], (err, plans) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Database error' });
+        }
+
+        if (plans.length === 0) {
+            createDefaultPlan(userId);
+            return res.json({ plan: [], weekDates, weekNumber });
+        }
+
+        const planPromises = plans.map(plan => {
+            return new Promise((resolve, reject) => {
+                db.all(`SELECT * FROM exercises WHERE plan_id = ? ORDER BY order_index`, [plan.id], (err, exercises) => {
+                    if (err) reject(err);
+                    else resolve({
+                        ...plan,
+                        exercises: exercises
+                    });
+                });
+            });
+        });
+
+        Promise.all(planPromises)
+            .then(fullPlan => res.json({ 
+                plan: fullPlan, 
+                weekDates: weekDates.map(date => date.toISOString()),
+                weekNumber,
+                currentDate: new Date().toISOString()
+            }))
+            .catch(error => {
+                console.error(error);
+                res.status(500).json({ error: 'Database error' });
+            });
+    });
+});
+
+// Сохранение плана тренировок
+app.post('/api/plan', (req, res) => {
+    const userId = 1; // Временно фиксированный ID
+    const plan = req.body.plan;
+
+    db.run(`DELETE FROM exercises WHERE plan_id IN (SELECT id FROM training_plans WHERE user_id = ?)`, [userId]);
+    db.run(`DELETE FROM training_plans WHERE user_id = ?`, [userId], (err) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Database error' });
+        }
+
+        plan.forEach((dayPlan, dayIndex) => {
+            db.run(`INSERT INTO training_plans (user_id, day_of_week, is_rest_day, notification_time, notification_interval) 
+                    VALUES (?, ?, ?, ?, ?)`,
+                [userId, dayIndex, dayPlan.isRestDay || false, dayPlan.notificationTime || '19:00', dayPlan.notificationInterval || 10],
+                function(err) {
+                    if (err) return console.error(err);
+
+                    const planId = this.lastID;
+                    dayPlan.exercises.forEach((exercise, exerciseIndex) => {
+                        db.run(`INSERT INTO exercises (plan_id, name, sets, reps, rest_between_sets, rest_after_exercise, order_index) 
+                                VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                            [planId, exercise.name, exercise.sets, exercise.reps, 
+                             exercise.rest_between_sets || 60, exercise.rest_after_exercise || 60, exerciseIndex]);
+                    });
+                }
+            );
+        });
+
+        scheduleNotifications(userId);
+        res.json({ status: 'success', message: 'План сохранен!' });
+    });
+});
+
+// Загрузка базового плана
+app.post('/api/load-default-plan', (req, res) => {
+    const userId = 1; // Временно фиксированный ID
+
+    db.run(`DELETE FROM exercises WHERE plan_id IN (SELECT id FROM training_plans WHERE user_id = ?)`, [userId]);
+    db.run(`DELETE FROM training_plans WHERE user_id = ?`, [userId], (err) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ error: 'Database error' });
+        }
+
+        createDefaultPlan(userId);
+        scheduleNotifications(userId);
+
+        res.json({ status: 'success', message: 'Базовый план загружен!' });
+    });
+});
+
+// Получение статистики
+app.get('/api/stats', (req, res) => {
+    const userId = 1; // Временно фиксированный ID
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Получаем завершенные дни за текущую неделю
+    db.all(`SELECT DISTINCT completed_date FROM completed_workouts 
+            WHERE user_id = ? AND completed_date >= date('now', '-7 days')`, 
+        [userId], (err, completedDays) => {
+            if (err) {
+                console.error(err);
+                return res.status(500).json({ error: 'Database error' });
+            }
+
+            // Получаем общее количество завершенных тренировок
+            db.get(`SELECT COUNT(*) as total FROM completed_workouts WHERE user_id = ?`, 
+                [userId], (err, totalResult) => {
+                    if (err) {
+                        console.error(err);
+                        return res.status(500).json({ error: 'Database error' });
+                    }
+
+                    res.json({
+                        completedThisWeek: completedDays.length,
+                        totalCompleted: totalResult.total,
+                        today: today
+                    });
+                }
+            );
+        }
+    );
+});
+
+// ГРУППОВЫЕ ТРЕНИРОВКИ - API
 
 // Создание новой группы
 app.post('/api/groups/create', async (req, res) => {
@@ -405,59 +872,7 @@ app.delete('/api/groups/:group_id', (req, res) => {
     });
 });
 
-// НОВЫЕ ФУНКЦИИ ДЛЯ ЛИДЕРБОРДА И АНАЛИТИКИ
-
-// Обновление лидерборда при завершении тренировки
-function updateLeaderboard(userId, exercise) {
-    const today = new Date().toISOString().split('T')[0];
-    
-    // Проверяем, достаточно ли интенсивная тренировка для зачета
-    const sets = parseInt(exercise.sets) || 0;
-    const reps = parseInt(exercise.reps) || 0;
-    
-    // Условия для зачета тренировочного дня:
-    // Минимум 2 подхода И минимум 5 повторений (или время для кардио)
-    const isValidWorkout = sets >= 2 && (reps >= 5 || exercise.reps.includes('сек') || exercise.reps.includes('мин'));
-    
-    if (!isValidWorkout) return;
-    
-    db.get(`SELECT * FROM leaderboard WHERE user_id = ?`, [userId], (err, userStats) => {
-        if (err) return;
-        
-        if (!userStats) {
-            // Создаем новую запись
-            db.run(`INSERT INTO leaderboard (user_id, total_workout_days, current_streak, longest_streak, last_workout_date) 
-                    VALUES (?, 1, 1, 1, ?)`, [userId, today]);
-        } else {
-            let newCurrentStreak = userStats.current_streak;
-            let newTotalDays = userStats.total_workout_days;
-            
-            // Проверяем, является ли сегодняшняя тренировка продолжением стрика
-            const lastWorkout = new Date(userStats.last_workout_date);
-            const todayDate = new Date(today);
-            const diffTime = Math.abs(todayDate - lastWorkout);
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            
-            if (diffDays === 1) {
-                // Продолжение стрика
-                newCurrentStreak += 1;
-            } else if (diffDays > 1) {
-                // Разрыв стрика
-                newCurrentStreak = 1;
-            }
-            // Если diffDays === 0 - тренировка уже засчитана сегодня
-            
-            if (diffDays > 0) {
-                newTotalDays += 1;
-            }
-            
-            const newLongestStreak = Math.max(newCurrentStreak, userStats.longest_streak);
-            
-            db.run(`UPDATE leaderboard SET total_workout_days = ?, current_streak = ?, longest_streak = ?, last_workout_date = ? WHERE user_id = ?`,
-                [newTotalDays, newCurrentStreak, newLongestStreak, today, userId]);
-        }
-    });
-}
+// ЛИДЕРБОРД И АНАЛИТИКА - API
 
 // Получение таблицы лидеров
 app.get('/api/leaderboard', (req, res) => {
@@ -623,9 +1038,7 @@ app.get('/api/share/:share_code', (req, res) => {
     });
 });
 
-// [Остальной существующий код...]
-
-// Обновляем функцию завершения тренировки для обновления лидерборда
+// Завершение тренировки с обновлением лидерборда
 app.post('/api/complete-workout', (req, res) => {
     const { user_id, exercise_name, sets, reps } = req.body;
     const today = new Date().toISOString().split('T')[0];
@@ -646,14 +1059,43 @@ app.post('/api/complete-workout', (req, res) => {
     );
 });
 
+// Health check
+app.get('/health', (req, res) => {
+    res.json({ 
+        status: 'OK', 
+        message: 'Server is running',
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV || 'development',
+        url: process.env.RENDER_EXTERNAL_URL || 'localhost:3000'
+    });
+});
+
 // Запуск сервера
 app.listen(PORT, '0.0.0.0', () => {
     console.log('='.repeat(60));
     console.log('🚀 TrainPlan Server with Groups & Leaderboard Started!');
     console.log(`📍 Port: ${PORT}`);
     console.log(`🌐 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`🔗 URL: ${process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`}`);
     console.log('📊 Features: Group workouts, Leaderboard, Analytics, Sharing');
     console.log('='.repeat(60));
     
     updateCurrentWeek();
+});
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+    console.log('\n🛑 Stopping server...');
+    Object.values(jobs).flat().forEach(job => job.cancel());
+    bot.stop();
+    db.close();
+    process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+    console.log('\n🛑 Stopping server...');
+    Object.values(jobs).flat().forEach(job => job.cancel());
+    bot.stop();
+    db.close();
+    process.exit(0);
 });
