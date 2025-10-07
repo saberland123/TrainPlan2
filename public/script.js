@@ -505,4 +505,266 @@ document.addEventListener('DOMContentLoaded', () => {
         loadPlan();
         loadStats();
     }, 24 * 60 * 60 * 1000);
+});// Добавляем в существующий script.js
+
+// Новые экраны
+const screens = {
+    // существующие...
+    'groups-screen': 'groups-screen',
+    'create-group-screen': 'create-group-screen', 
+    'group-detail-screen': 'group-detail-screen',
+    'leaderboard-screen': 'leaderboard-screen',
+    'analytics-screen': 'analytics-screen',
+    'share-screen': 'share-screen'
+};
+
+// Навигация
+document.getElementById('menu-groups-btn').addEventListener('click', () => {
+    loadUserGroups();
+    showScreen('groups-screen');
 });
+
+document.getElementById('menu-leaderboard-btn').addEventListener('click', () => {
+    loadLeaderboard();
+    showScreen('leaderboard-screen');
+});
+
+document.getElementById('menu-analytics-btn').addEventListener('click', () => {
+    loadAnalytics();
+    showScreen('analytics-screen');
+});
+
+// Функции для групповых тренировок
+async function loadUserGroups() {
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/groups/user/1`, { // user_id должен быть динамическим
+            headers: { 'Authorization': `tma ${tg.initData}` }
+        });
+        
+        if (response.ok) {
+            const data = await response.json();
+            renderGroupsList(data.groups);
+        }
+    } catch (error) {
+        console.error('Error loading groups:', error);
+        tg.showAlert('Не удалось загрузить группы');
+    }
+}
+
+function renderGroupsList(groups) {
+    const container = document.getElementById('groups-list-container');
+    container.innerHTML = '';
+    
+    if (groups.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <h3>👥 У вас пока нет групп</h3>
+                <p>Создайте первую группу и пригласите друзей!</p>
+                <button class="btn-primary" onclick="showScreen('create-group-screen')">
+                    Создать группу
+                </button>
+            </div>
+        `;
+        return;
+    }
+    
+    groups.forEach(group => {
+        const groupCard = document.createElement('div');
+        groupCard.className = 'group-card';
+        groupCard.innerHTML = `
+            <div class="group-header">
+                <h4>${group.name}</h4>
+                <span class="member-count">👥 ${group.member_count}</span>
+            </div>
+            <div class="group-description">${group.description || 'Без описания'}</div>
+            <div class="group-type">Тип: ${group.plan_type === 'week' ? 'Недельный' : 'Месячный'} план</div>
+            <button class="btn-secondary" onclick="openGroupDetail(${group.id})">
+                Открыть
+            </button>
+        `;
+        container.appendChild(groupCard);
+    });
+}
+
+// Создание группы
+document.getElementById('create-group-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const name = document.getElementById('group-name').value;
+    const description = document.getElementById('group-description').value;
+    const planType = document.getElementById('group-plan-type').value;
+    
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/groups/create`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `tma ${tg.initData}`
+            },
+            body: JSON.stringify({
+                name,
+                description,
+                plan_type: planType,
+                creator_id: 1 // Должен быть динамическим
+            })
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            tg.showPopup({
+                title: 'Группа создана!',
+                message: `Пригласительный код: ${result.invite_code}`,
+                buttons: [{ type: 'ok' }]
+            });
+            showScreen('groups-screen');
+            loadUserGroups();
+        }
+    } catch (error) {
+        console.error('Error creating group:', error);
+        tg.showAlert('Ошибка при создании группы');
+    }
+});
+
+// Присоединение к группе
+document.getElementById('join-group-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const inviteCode = document.getElementById('invite-code').value.toUpperCase();
+    
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/groups/join`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `tma ${tg.initData}`
+            },
+            body: JSON.stringify({
+                invite_code: inviteCode,
+                user_id: 1 // Должен быть динамическим
+            })
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            tg.showPopup({
+                title: 'Успех!',
+                message: `Вы присоединились к группе "${result.group_name}"`,
+                buttons: [{ type: 'ok' }]
+            });
+            document.getElementById('invite-code').value = '';
+            showScreen('groups-screen');
+            loadUserGroups();
+        } else {
+            const error = await response.json();
+            tg.showAlert(error.error || 'Ошибка при присоединении');
+        }
+    } catch (error) {
+        console.error('Error joining group:', error);
+        tg.showAlert('Ошибка при присоединении к группе');
+    }
+});
+
+// Функции для лидерборда
+async function loadLeaderboard() {
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/leaderboard`);
+        if (response.ok) {
+            const data = await response.json();
+            renderLeaderboard(data.leaders);
+        }
+    } catch (error) {
+        console.error('Error loading leaderboard:', error);
+    }
+}
+
+function renderLeaderboard(leaders) {
+    const container = document.getElementById('leaderboard-container');
+    container.innerHTML = '';
+    
+    leaders.forEach((leader, index) => {
+        const rank = index + 1;
+        const leaderItem = document.createElement('div');
+        leaderItem.className = 'leader-item';
+        leaderItem.innerHTML = `
+            <div class="leader-rank">${rank}</div>
+            <div class="leader-info">
+                <div class="leader-name">${leader.first_name}</div>
+                <div class="leader-stats">
+                    ${leader.total_workout_days} дней • Стрик: ${leader.current_streak}
+                </div>
+            </div>
+            <div class="leader-badge">
+                ${rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '🏅'}
+            </div>
+        `;
+        container.appendChild(leaderItem);
+    });
+}
+
+// Аналитика
+async function loadAnalytics() {
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/analytics/1`); // user_id должен быть динамическим
+        if (response.ok) {
+            const data = await response.json();
+            renderAnalytics(data);
+        }
+    } catch (error) {
+        console.error('Error loading analytics:', error);
+    }
+}
+
+function renderAnalytics(data) {
+    // Общая статистика
+    document.getElementById('total-workout-days').textContent = data.leader_stats.total_workout_days;
+    document.getElementById('current-streak').textContent = data.leader_stats.current_streak;
+    document.getElementById('longest-streak').textContent = data.leader_stats.longest_streak;
+    
+    // Топ упражнений
+    const exercisesContainer = document.getElementById('top-exercises');
+    exercisesContainer.innerHTML = data.exercise_stats.slice(0, 5).map(ex => `
+        <div class="exercise-stat">
+            <span>${ex.exercise_name}</span>
+            <span>${ex.count} раз</span>
+        </div>
+    `).join('');
+    
+    // Еженедельная активность
+    renderWeeklyChart(data.weekly_stats);
+}
+
+// Шаринг результатов
+async function shareResults() {
+    try {
+        const response = await fetch(`${BACKEND_URL}/api/share/results`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `tma ${tg.initData}`
+            },
+            body: JSON.stringify({
+                user_id: 1, // Должен быть динамическим
+                days_range: 7
+            })
+        });
+        
+        if (response.ok) {
+            const result = await response.json();
+            
+            // Показываем ссылку для шаринга
+            tg.showPopup({
+                title: 'Поделиться результатами',
+                message: `Ваша ссылка: ${result.share_code}\n\nСкопируйте и отправьте друзьям!`,
+                buttons: [{ type: 'ok' }]
+            });
+            
+            // Можно также автоматически скопировать в буфер обмена
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(result.share_code);
+            }
+        }
+    } catch (error) {
+        console.error('Error sharing results:', error);
+        tg.showAlert('Ошибка при создании ссылки');
+    }
+}
