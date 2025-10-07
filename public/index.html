@@ -23,202 +23,33 @@
                 <p>Создай свой идеальный план тренировок и получай умные напоминания</p>
             </div>
 
+            <!-- ОБНОВЛЕННОЕ МЕНЮ - ТОЛЬКО ОСНОВНЫЕ КНОПКИ -->
             <div class="menu-grid">
                 <button id="menu-plan-btn" class="menu-button">
                     <span>📅 Мой план</span>
                 </button>
-                <button id="menu-profile-btn" class="menu-button">
-                    <span>👤 Профиль</span>
+                <button id="menu-groups-btn" class="menu-button">
+                    <span>👥 Группы</span>
                 </button>
-                <button id="menu-settings-btn" class="menu-button">
-                    <span>⚙️ Настройки</span>
+                <button id="menu-leaderboard-btn" class="menu-button">
+                    <span>🏆 Лидеры</span>
                 </button>
-            </div>
-
-            <div class="quick-stats">
-                <div class="stat-card">
-                    <div class="stat-number" id="stat-days">0</div>
-                    <div class="stat-label">Завершено дней</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number" id="stat-weeks">0</div>
-                    <div class="stat-label">Завершено недель</div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Экран плана тренировок -->
-    <div id="plan-screen" class="screen">
-        <div class="container">
-            <div class="header">
-                <button class="back-button">← Назад</button>
-                <h2>📅 Мой план</h2>
-            </div>
-            
-            <div class="week-plan" id="week-plan-container">
-                <!-- Динамически генерируемые карточки дней -->
-            </div>
-        </div>
-    </div>
-
-    <!-- Экран профиля -->
-    <div id="profile-screen" class="screen">
-        <div class="container">
-            <div class="header">
-                <button class="back-button">← Назад</button>
-                <h2>👤 Мой профиль</h2>
-            </div>
-            
-            <div class="profile-stats">
-                <div class="stat-item">
-                    <span class="stat-label">Всего тренировочных дней:</span>
-                    <span class="stat-value" id="stat-days-profile">0</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Завершено недель:</span>
-                    <span class="stat-value" id="stat-weeks-profile">0</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Текущий прогресс:</span>
-                    <span class="stat-value" id="stat-progress">0/0</span>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Модальное окно дня -->
-    <div id="day-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="modal-day-title">Упражнения на день</h3>
-                <button id="modal-close-btn" class="close-btn">×</button>
-            </div>
-            
-            <div class="modal-body">
-                <!-- Настройки уведомлений -->
-                <div id="notification-settings" class="settings-section">
-                    <h4>🔔 Настройки уведомлений</h4>
-                    <div class="setting-row">
-                        <label>Время начала:</label>
-                        <input type="time" id="notification-time" value="19:00">
-                    </div>
-                    <div class="setting-row">
-                        <label>Интервал (мин):</label>
-                        <select id="notification-interval">
-                            <option value="5">5 минут</option>
-                            <option value="10" selected>10 минут</option>
-                            <option value="15">15 минут</option>
-                            <option value="30">30 минут</option>
-                        </select>
-                    </div>
-                    <button id="save-notification-settings" class="btn-primary">Сохранить настройки</button>
-                </div>
-
-                <!-- Список упражнений -->
-                <div class="exercises-section">
-                    <h4>Упражнения</h4>
-                    <div id="exercises-list" class="exercises-list">
-                        <!-- Динамически генерируемые упражнения -->
-                    </div>
-                </div>
-
-                <!-- Форма добавления упражнения -->
-                <form id="add-exercise-form" class="add-exercise-form">
-                    <h4>Добавить упражнение</h4>
-                    <input type="text" id="ex-name" placeholder="Название упражнения" required>
-                    <input type="number" id="ex-sets" placeholder="Кол-во подходов" min="1" required>
-                    <input type="text" id="ex-reps" placeholder="Повторения (например: 10 или 30 раз)" required>
-                    <button type="submit" class="btn-primary">Добавить</button>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- Модальное окно настроек -->
-    <div id="settings-modal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>⚙️ Настройки</h3>
-                <button id="settings-close-btn" class="close-btn">×</button>
-            </div>
-            
-            <div class="modal-body">
-                <div class="settings-section">
-                    <div class="setting-item">
-                        <label>
-                            <input type="checkbox" id="global-notifications" checked>
-                            Включить уведомления
-                        </label>
-                    </div>
-                    <div class="setting-item">
-                        <label>
-                            <input type="checkbox" id="sound-enabled" checked>
-                            Звуковые уведомления
-                        </label>
-                    </div>
-                    <div class="setting-item">
-                        <label>Язык:</label>
-                        <select id="language-select">
-                            <option value="ru">Русский</option>
-                            <option value="en">English</option>
-                        </select>
-                    </div>
-                    <div class="setting-item">
-                        <label>Часовой пояс:</label>
-                        <select id="timezone-select">
-                            <option value="Europe/Moscow">Москва (UTC+3)</option>
-                            <option value="Europe/Kaliningrad">Калининград (UTC+2)</option>
-                        </select>
-                    </div>
-                    <button id="save-global-settings" class="btn-primary">Сохранить настройки</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script src="script.js"></script>
-</body>
-</html><!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TrainPlan - Планировщик тренировок</title>
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <!-- Главный экран -->
-    <div id="home-screen" class="screen active">
-        <div class="container">
-            <div class="header">
-                <h1>💪 TrainPlan</h1>
-                <div class="user-info">
-                    Привет, <span id="user-name">Друг</span>!
-                </div>
-            </div>
-            
-            <div class="welcome-card">
-                <h2>Добро пожаловать!</h2>
-                <p>Создай свой идеальный план тренировок и получай умные напоминания</p>
-            </div>
-
-            <div class="menu-grid">
-                <button id="menu-plan-btn" class="menu-button">
-                    <span>📅 Мой план</span>
-                </button>
-                <button id="menu-profile-btn" class="menu-button">
-                    <span>👤 Профиль</span>
-                </button>
-                <button id="menu-settings-btn" class="menu-button">
-                    <span>⚙️ Настройки</span>
-                </button>
-                <button id="load-default-plan" class="menu-button">
-                    <span>📋 Базовый план</span>
+                <button id="menu-analytics-btn" class="menu-button">
+                    <span>📊 Статистика</span>
                 </button>
             </div>
 
+            <!-- ДОПОЛНИТЕЛЬНЫЕ КНОПКИ ОТДЕЛЬНО -->
+            <div class="action-buttons">
+                <button id="load-default-plan" class="btn-secondary">
+                    📋 Загрузить базовый план
+                </button>
+                <button id="menu-settings-btn" class="btn-secondary">
+                    ⚙️ Настройки
+                </button>
+            </div>
+
+            <!-- ЛИЧНАЯ СТАТИСТИКА -->
             <div class="quick-stats">
                 <div class="stat-card">
                     <div class="stat-number" id="stat-days">0</div>
@@ -247,32 +78,130 @@
         </div>
     </div>
 
-    <!-- Экран профиля -->
-    <div id="profile-screen" class="screen">
+    <!-- Экран групп -->
+    <div id="groups-screen" class="screen">
         <div class="container">
             <div class="header">
                 <button class="back-button">← Назад</button>
-                <h2>👤 Мой профиль</h2>
-                <div class="week-info" id="week-info-profile"></div>
+                <h2>👥 Групповые тренировки</h2>
             </div>
             
-            <div class="profile-stats">
-                <div class="stat-item">
-                    <span class="stat-label">Завершено на этой неделе:</span>
-                    <span class="stat-value" id="stat-progress">0/0 дней</span>
-                </div>
-                <div class="progress-container">
-                    <div class="progress-bar" id="progress-bar"></div>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Всего тренировок:</span>
-                    <span class="stat-value" id="stat-total">0</span>
-                </div>
-                <div class="stat-item">
-                    <span class="stat-label">Завершено недель:</span>
-                    <span class="stat-value" id="stat-weeks-profile">0</span>
+            <div class="tab-navigation">
+                <button class="tab-btn active" onclick="switchGroupTab('my-groups')">Мои группы</button>
+                <button class="tab-btn" onclick="switchGroupTab('join-group')">Присоединиться</button>
+                <button class="tab-btn" onclick="switchGroupTab('create-group')">Создать</button>
+            </div>
+            
+            <!-- Мои группы -->
+            <div id="my-groups-tab" class="tab-content active">
+                <div id="groups-list-container">
+                    <!-- Группы загружаются динамически -->
                 </div>
             </div>
+            
+            <!-- Присоединиться к группе -->
+            <div id="join-group-tab" class="tab-content">
+                <div class="welcome-card">
+                    <h3>Присоединиться к группе</h3>
+                    <p>Введите пригласительный код, который вам отправили:</p>
+                    <form id="join-group-form" class="group-form">
+                        <input type="text" id="invite-code" placeholder="Например: A1B2C3D4" required>
+                        <button type="submit" class="btn-primary">Присоединиться</button>
+                    </form>
+                </div>
+            </div>
+            
+            <!-- Создание группы -->
+            <div id="create-group-tab" class="tab-content">
+                <div class="welcome-card">
+                    <h3>Создать новую группу</h3>
+                    <form id="create-group-form" class="group-form">
+                        <input type="text" id="group-name" placeholder="Название группы" required>
+                        <textarea id="group-description" placeholder="Описание группы (необязательно)"></textarea>
+                        <select id="group-plan-type">
+                            <option value="week">Недельный план</option>
+                            <option value="month">Месячный план</option>
+                        </select>
+                        <button type="submit" class="btn-primary">Создать группу</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Экран деталей группы -->
+    <div id="group-detail-screen" class="screen">
+        <div class="container">
+            <div class="header">
+                <button class="back-button">← Назад</button>
+                <h2 id="group-detail-title">Группа</h2>
+            </div>
+            
+            <div id="group-detail-container">
+                <!-- Детали группы загружаются динамически -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Экран таблицы лидеров -->
+    <div id="leaderboard-screen" class="screen">
+        <div class="container">
+            <div class="header">
+                <button class="back-button">← Назад</button>
+                <h2>🏆 Таблица лидеров</h2>
+            </div>
+            
+            <div class="leaderboard-info">
+                <p>Рейтинг основан на количестве завершенных тренировочных дней</p>
+                <small>Минимум: 2 подхода × 5+ повторений</small>
+            </div>
+            
+            <div id="leaderboard-container" class="leaderboard-list">
+                <!-- Лидеры загружаются динамически -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Экран аналитики -->
+    <div id="analytics-screen" class="screen">
+        <div class="container">
+            <div class="header">
+                <button class="back-button">← Назад</button>
+                <h2>📊 Моя статистика</h2>
+            </div>
+            
+            <div class="analytics-grid">
+                <div class="stat-card large">
+                    <div class="stat-number" id="total-workout-days">0</div>
+                    <div class="stat-label">Всего тренировок</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="current-streak">0</div>
+                    <div class="stat-label">Текущий стрик</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="longest-streak">0</div>
+                    <div class="stat-label">Лучший стрик</div>
+                </div>
+            </div>
+            
+            <div class="analytics-section">
+                <h3>📈 Топ упражнений</h3>
+                <div id="top-exercises" class="exercises-stats">
+                    <!-- Статистика упражнений -->
+                </div>
+            </div>
+            
+            <div class="analytics-section">
+                <h3>🔄 Активность по неделям</h3>
+                <div id="weekly-chart" class="chart-container">
+                    <!-- График активности -->
+                </div>
+            </div>
+            
+            <button class="btn-primary" onclick="shareResults()">
+                📤 Поделиться результатами
+            </button>
         </div>
     </div>
 
@@ -371,148 +300,4 @@
 
     <script src="script.js"></script>
 </body>
-</html><!-- Экран групп -->
-<div id="groups-screen" class="screen">
-    <div class="container">
-        <div class="header">
-            <button class="back-button">← Назад</button>
-            <h2>👥 Групповые тренировки</h2>
-        </div>
-        
-        <div class="tab-navigation">
-            <button class="tab-btn active" onclick="switchGroupTab('my-groups')">Мои группы</button>
-            <button class="tab-btn" onclick="switchGroupTab('join-group')">Присоединиться</button>
-            <button class="tab-btn" onclick="switchGroupTab('create-group')">Создать</button>
-        </div>
-        
-        <!-- Мои группы -->
-        <div id="my-groups-tab" class="tab-content active">
-            <div id="groups-list-container">
-                <!-- Группы загружаются динамически -->
-            </div>
-        </div>
-        
-        <!-- Присоединиться к группе -->
-        <div id="join-group-tab" class="tab-content">
-            <div class="welcome-card">
-                <h3>Присоединиться к группе</h3>
-                <p>Введите пригласительный код, который вам отправили:</p>
-                <form id="join-group-form" class="group-form">
-                    <input type="text" id="invite-code" placeholder="Например: A1B2C3D4" required>
-                    <button type="submit" class="btn-primary">Присоединиться</button>
-                </form>
-            </div>
-        </div>
-        
-        <!-- Создание группы -->
-        <div id="create-group-tab" class="tab-content">
-            <div class="welcome-card">
-                <h3>Создать новую группу</h3>
-                <form id="create-group-form" class="group-form">
-                    <input type="text" id="group-name" placeholder="Название группы" required>
-                    <textarea id="group-description" placeholder="Описание группы (необязательно)"></textarea>
-                    <select id="group-plan-type">
-                        <option value="week">Недельный план</option>
-                        <option value="month">Месячный план</option>
-                    </select>
-                    <button type="submit" class="btn-primary">Создать группу</button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Экран деталей группы -->
-<div id="group-detail-screen" class="screen">
-    <div class="container">
-        <div class="header">
-            <button class="back-button">← Назад</button>
-            <h2 id="group-detail-title">Группа</h2>
-        </div>
-        
-        <div id="group-detail-container">
-            <!-- Детали группы загружаются динамически -->
-        </div>
-    </div>
-</div>
-
-<!-- Экран таблицы лидеров -->
-<div id="leaderboard-screen" class="screen">
-    <div class="container">
-        <div class="header">
-            <button class="back-button">← Назад</button>
-            <h2>🏆 Таблица лидеров</h2>
-        </div>
-        
-        <div class="leaderboard-info">
-            <p>Рейтинг основан на количестве завершенных тренировочных дней</p>
-            <small>Минимум: 2 подхода × 5+ повторений</small>
-        </div>
-        
-        <div id="leaderboard-container" class="leaderboard-list">
-            <!-- Лидеры загружаются динамически -->
-        </div>
-    </div>
-</div>
-
-<!-- Экран аналитики -->
-<div id="analytics-screen" class="screen">
-    <div class="container">
-        <div class="header">
-            <button class="back-button">← Назад</button>
-            <h2>📊 Моя статистика</h2>
-        </div>
-        
-        <div class="analytics-grid">
-            <div class="stat-card large">
-                <div class="stat-number" id="total-workout-days">0</div>
-                <div class="stat-label">Всего тренировок</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number" id="current-streak">0</div>
-                <div class="stat-label">Текущий стрик</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-number" id="longest-streak">0</div>
-                <div class="stat-label">Лучший стрик</div>
-            </div>
-        </div>
-        
-        <div class="analytics-section">
-            <h3>📈 Топ упражнений</h3>
-            <div id="top-exercises" class="exercises-stats">
-                <!-- Статистика упражнений -->
-            </div>
-        </div>
-        
-        <div class="analytics-section">
-            <h3>🔄 Активность по неделям</h3>
-            <div id="weekly-chart" class="chart-container">
-                <!-- График активности -->
-            </div>
-        </div>
-        
-        <button class="btn-primary" onclick="shareResults()">
-            📤 Поделиться результатами
-        </button>
-    </div>
-</div>
-
-<!-- Добавьте кнопки в главное меню -->
-<div class="menu-grid">
-    <button id="menu-plan-btn" class="menu-button">
-        <span>📅 Мой план</span>
-    </button>
-    <button id="menu-groups-btn" class="menu-button">
-        <span>👥 Группы</span>
-    </button>
-    <button id="menu-leaderboard-btn" class="menu-button">
-        <span>🏆 Лидеры</span>
-    </button>
-    <button id="menu-analytics-btn" class="menu-button">
-        <span>📊 Статистика</span>
-    </button>
-    <button id="menu-settings-btn" class="menu-button">
-        <span>⚙️ Настройки</span>
-    </button>
-</div>
+</html>

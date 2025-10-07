@@ -3,7 +3,12 @@ document.addEventListener('DOMContentLoaded', () => {
     tg.expand();
     tg.enableClosingConfirmation();
 
-    const BACKEND_URL = 'https://trainplan2-1.onrender.com';
+    // Автоматическое определение URL для Render
+    const BACKEND_URL = window.location.hostname.includes('render.com') 
+        ? window.location.origin
+        : 'http://localhost:3000';
+
+    console.log('Backend URL:', BACKEND_URL);
 
     let appData = {
         plan: [],
@@ -20,16 +25,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const modal = document.getElementById('day-modal');
     const settingsModal = document.getElementById('settings-modal');
     
-    // Анимации
-    function animateElement(element, animation) {
-        element.style.animation = 'none';
-        setTimeout(() => {
-            element.style.animation = `${animation} 0.5s ease-out`;
-        }, 10);
-    }
-
+    // НАВИГАЦИЯ
     function showScreen(screenId) {
-        // Анимация перехода между экранами
         screens.forEach(screen => {
             if (screen.classList.contains('active')) {
                 screen.style.animation = 'fadeOut 0.3s ease-out';
@@ -44,9 +41,15 @@ document.addEventListener('DOMContentLoaded', () => {
             targetScreen.classList.add('active');
             animateElement(targetScreen, 'fadeIn');
             
-            // Вибрация для обратной связи
             tg.HapticFeedback.impactOccurred('soft');
         }, 300);
+    }
+
+    function animateElement(element, animation) {
+        element.style.animation = 'none';
+        setTimeout(() => {
+            element.style.animation = `${animation} 0.5s ease-out`;
+        }, 10);
     }
 
     function openModal(modalElement) {
@@ -67,21 +70,340 @@ document.addEventListener('DOMContentLoaded', () => {
         tg.HapticFeedback.impactOccurred('light');
     }
 
-    // Навигация
+    // ОБРАБОТЧИКИ КНОПОК МЕНЮ
     document.getElementById('menu-plan-btn').addEventListener('click', () => {
         renderWeekPlan();
         showScreen('plan-screen');
     });
 
-    document.getElementById('menu-profile-btn').addEventListener('click', () => {
-        loadStats();
-        showScreen('profile-screen');
+    document.getElementById('menu-groups-btn').addEventListener('click', () => {
+        loadUserGroups();
+        showScreen('groups-screen');
+    });
+
+    document.getElementById('menu-leaderboard-btn').addEventListener('click', () => {
+        loadLeaderboard();
+        showScreen('leaderboard-screen');
+    });
+
+    document.getElementById('menu-analytics-btn').addEventListener('click', () => {
+        loadAnalytics();
+        showScreen('analytics-screen');
     });
 
     document.getElementById('menu-settings-btn').addEventListener('click', () => openModal(settingsModal));
-    
+
     document.querySelectorAll('.back-button').forEach(button => {
         button.addEventListener('click', () => showScreen('home-screen'));
+    });
+
+    // ФУНКЦИИ ДЛЯ ГРУППОВЫХ ТРЕНИРОВОК
+    async function loadUserGroups() {
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/groups/user/1`);
+            
+            if (response.ok) {
+                const data = await response.json();
+                renderGroupsList(data.groups);
+            } else {
+                console.error('Failed to load groups');
+            }
+        } catch (error) {
+            console.error('Error loading groups:', error);
+            tg.showAlert('Не удалось загрузить группы');
+        }
+    }
+
+    function renderGroupsList(groups) {
+        const container = document.getElementById('groups-list-container');
+        container.innerHTML = '';
+        
+        if (!groups || groups.length === 0) {
+            container.innerHTML = `
+                <div class="empty-state">
+                    <h3>👥 У вас пока нет групп</h3>
+                    <p>Создайте первую группу и пригласите друзей!</p>
+                    <button class="btn-primary" onclick="switchGroupTab('create-group')">
+                        Создать группу
+                    </button>
+                </div>
+            `;
+            return;
+        }
+        
+        groups.forEach(group => {
+            const groupCard = document.createElement('div');
+            groupCard.className = 'group-card';
+            groupCard.innerHTML = `
+                <div class="group-header">
+                    <h4>${group.name}</h4>
+                    <span class="member-count">👥 ${group.member_count}</span>
+                </div>
+                <div class="group-description">${group.description || 'Без описания'}</div>
+                <div class="group-type">Тип: ${group.plan_type === 'week' ? 'Недельный' : 'Месячный'} план</div>
+                <button class="btn-secondary" onclick="openGroupDetail(${group.id})">
+                    Открыть
+                </button>
+            `;
+            container.appendChild(groupCard);
+        });
+    }
+
+    // Переключение табов в группах
+    window.switchGroupTab = function(tabName) {
+        // Скрыть все табы
+        document.querySelectorAll('.tab-content').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('active');
+        });
+        
+        // Показать выбранный таб
+        document.getElementById(`${tabName}-tab`).classList.add('active');
+        event.target.classList.add('active');
+    }
+
+    // Создание группы
+    document.getElementById('create-group-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const name = document.getElementById('group-name').value;
+        const description = document.getElementById('group-description').value;
+        const planType = document.getElementById('group-plan-type').value;
+        
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/groups/create`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name,
+                    description,
+                    plan_type: planType,
+                    creator_id: 1
+                })
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                tg.showPopup({
+                    title: 'Группа создана!',
+                    message: `Пригласительный код: ${result.invite_code}`,
+                    buttons: [{ type: 'ok' }]
+                });
+                showScreen('groups-screen');
+                loadUserGroups();
+            } else {
+                const error = await response.json();
+                tg.showAlert(error.error || 'Ошибка при создании группы');
+            }
+        } catch (error) {
+            console.error('Error creating group:', error);
+            tg.showAlert('Ошибка при создании группы');
+        }
+    });
+
+    // Присоединение к группе
+    document.getElementById('join-group-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const inviteCode = document.getElementById('invite-code').value.toUpperCase();
+        
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/groups/join`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    invite_code: inviteCode,
+                    user_id: 1
+                })
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                tg.showPopup({
+                    title: 'Успех!',
+                    message: `Вы присоединились к группе "${result.group_name}"`,
+                    buttons: [{ type: 'ok' }]
+                });
+                document.getElementById('invite-code').value = '';
+                showScreen('groups-screen');
+                loadUserGroups();
+            } else {
+                const error = await response.json();
+                tg.showAlert(error.error || 'Ошибка при присоединении');
+            }
+        } catch (error) {
+            console.error('Error joining group:', error);
+            tg.showAlert('Ошибка при присоединении к группе');
+        }
+    });
+
+    // Функции для лидерборда
+    async function loadLeaderboard() {
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/leaderboard`);
+            if (response.ok) {
+                const data = await response.json();
+                renderLeaderboard(data.leaders);
+            }
+        } catch (error) {
+            console.error('Error loading leaderboard:', error);
+        }
+    }
+
+    function renderLeaderboard(leaders) {
+        const container = document.getElementById('leaderboard-container');
+        container.innerHTML = '';
+        
+        if (!leaders || leaders.length === 0) {
+            container.innerHTML = '<div class="empty-state"><p>Пока нет данных для таблицы лидеров</p></div>';
+            return;
+        }
+        
+        leaders.forEach((leader, index) => {
+            const rank = index + 1;
+            const leaderItem = document.createElement('div');
+            leaderItem.className = 'leader-item';
+            leaderItem.innerHTML = `
+                <div class="leader-rank">${rank}</div>
+                <div class="leader-info">
+                    <div class="leader-name">${leader.first_name || 'Пользователь'}</div>
+                    <div class="leader-stats">
+                        ${leader.total_workout_days} дней • Стрик: ${leader.current_streak}
+                    </div>
+                </div>
+                <div class="leader-badge">
+                    ${rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '🏅'}
+                </div>
+            `;
+            container.appendChild(leaderItem);
+        });
+    }
+
+    // Аналитика
+    async function loadAnalytics() {
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/analytics/1`);
+            if (response.ok) {
+                const data = await response.json();
+                renderAnalytics(data);
+            }
+        } catch (error) {
+            console.error('Error loading analytics:', error);
+        }
+    }
+
+    function renderAnalytics(data) {
+        // Общая статистика
+        document.getElementById('total-workout-days').textContent = data.leader_stats.total_workout_days || 0;
+        document.getElementById('current-streak').textContent = data.leader_stats.current_streak || 0;
+        document.getElementById('longest-streak').textContent = data.leader_stats.longest_streak || 0;
+        
+        // Топ упражнений
+        const exercisesContainer = document.getElementById('top-exercises');
+        if (data.exercise_stats && data.exercise_stats.length > 0) {
+            exercisesContainer.innerHTML = data.exercise_stats.slice(0, 5).map(ex => `
+                <div class="exercise-stat">
+                    <span>${ex.exercise_name}</span>
+                    <span>${ex.count} раз</span>
+                </div>
+            `).join('');
+        } else {
+            exercisesContainer.innerHTML = '<p>Нет данных об упражнениях</p>';
+        }
+        
+        // Еженедельная активность
+        renderWeeklyChart(data.weekly_stats || []);
+    }
+
+    function renderWeeklyChart(weeklyStats) {
+        const container = document.getElementById('weekly-chart');
+        container.innerHTML = '';
+        
+        if (weeklyStats.length === 0) {
+            container.innerHTML = '<p>Нет данных за последние недели</p>';
+            return;
+        }
+        
+        weeklyStats.forEach(week => {
+            const bar = document.createElement('div');
+            bar.className = 'chart-bar';
+            bar.style.height = `${(week.workout_days / 7) * 100}%`;
+            bar.title = `${week.workout_days} дней`;
+            container.appendChild(bar);
+        });
+    }
+
+    // Шаринг результатов
+    window.shareResults = async function() {
+        try {
+            const response = await fetch(`${BACKEND_URL}/api/share/results`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    user_id: 1,
+                    days_range: 7
+                })
+            });
+            
+            if (response.ok) {
+                const result = await response.json();
+                
+                tg.showPopup({
+                    title: 'Поделиться результатами',
+                    message: `Ваш код: ${result.share_code}\n\nСкопируйте и отправьте друзьям!`,
+                    buttons: [{ type: 'ok' }]
+                });
+                
+                if (navigator.clipboard) {
+                    navigator.clipboard.writeText(result.share_code);
+                }
+            }
+        } catch (error) {
+            console.error('Error sharing results:', error);
+            tg.showAlert('Ошибка при создании ссылки');
+        }
+    }
+
+    // Загрузка базового плана
+    document.getElementById('load-default-plan').addEventListener('click', async () => {
+        if (confirm('Загрузить базовый план тренировок? Это перезапишет текущий план.')) {
+            try {
+                tg.showPopup({
+                    title: 'Загрузка',
+                    message: 'Загружаем базовый план...',
+                    buttons: []
+                });
+
+                const response = await fetch(`${BACKEND_URL}/api/load-default-plan`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    await loadPlan();
+                    tg.showPopup({
+                        title: 'Успех!',
+                        message: 'Базовый план загружен!',
+                        buttons: [{ type: 'ok' }]
+                    });
+                    tg.HapticFeedback.notificationOccurred('success');
+                }
+            } catch (error) {
+                console.error(error);
+                tg.showAlert('Ошибка при загрузке плана');
+                tg.HapticFeedback.notificationOccurred('error');
+            }
+        }
     });
 
     // Форматирование даты
@@ -114,42 +436,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Загрузка базового плана
-    document.getElementById('load-default-plan').addEventListener('click', async () => {
-        if (confirm('Загрузить базовый план тренировок? Это перезапишет текущий план.')) {
-            try {
-                tg.showPopup({
-                    title: 'Загрузка',
-                    message: 'Загружаем базовый план...',
-                    buttons: []
-                });
-
-                const response = await fetch('/api/load-default-plan', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `tma ${tg.initData}`
-                    }
-                });
-
-                if (response.ok) {
-                    await loadPlan();
-                    tg.showPopup({
-                        title: 'Успех!',
-                        message: 'Базовый план загружен!',
-                        buttons: [{ type: 'ok' }]
-                    });
-                    tg.HapticFeedback.notificationOccurred('success');
-                }
-            } catch (error) {
-                console.error(error);
-                tg.showAlert('Ошибка при загрузке плана');
-                tg.HapticFeedback.notificationOccurred('error');
-            }
-        }
-    });
-
-    // Рендеринг плана с анимациями
+    // Рендеринг плана тренировок
     function renderWeekPlan() {
         const container = document.getElementById('week-plan-container');
         const weekInfo = document.getElementById('week-info');
@@ -166,7 +453,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 dayCard.classList.add('rest-day');
             }
             
-            // Анимация появления с задержкой
             dayCard.style.animationDelay = `${index * 0.1}s`;
             dayCard.style.animation = 'scaleIn 0.5s ease-out forwards';
             dayCard.style.opacity = '0';
@@ -210,12 +496,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Загрузка статистики
     async function loadStats() {
         try {
-            const response = await fetch('/api/stats', {
-                method: 'GET',
-                headers: {
-                    'Authorization': `tma ${tg.initData}`
-                }
-            });
+            const response = await fetch(`${BACKEND_URL}/api/stats`);
             
             if (response.ok) {
                 appData.stats = await response.json();
@@ -230,23 +511,51 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('stat-days').textContent = appData.stats.completedThisWeek || 0;
         document.getElementById('stat-weeks').textContent = Math.floor((appData.stats.totalCompleted || 0) / 5);
         document.getElementById('stat-total').textContent = appData.stats.totalCompleted || 0;
-        
-        const progressElement = document.getElementById('stat-progress');
-        const completed = appData.stats.completedThisWeek || 0;
-        const trainingDaysCount = appData.plan.filter(day => !day.is_rest_day).length;
-        progressElement.textContent = `${completed}/${trainingDaysCount} дней`;
-        
-        const progressBar = document.getElementById('progress-bar');
-        if (progressBar) {
-            const progressPercent = trainingDaysCount > 0 ? Math.min((completed / trainingDaysCount) * 100, 100) : 0;
-            progressBar.style.width = `${progressPercent}%`;
-            progressBar.style.backgroundColor = progressPercent >= 80 ? '#28a745' : 
-                                              progressPercent >= 60 ? '#ffc107' : '#007bff';
-        }
+    }
 
-        const weekInfoElement = document.getElementById('week-info-profile');
-        if (weekInfoElement && appData.weekDates && appData.weekDates.length > 0) {
-            weekInfoElement.textContent = `Неделя ${appData.weekNumber} • ${formatWeekRange(appData.weekDates)}`;
+    // Работа с API
+    async function loadPlan() {
+        try {
+            tg.MainButton.showProgress();
+            const response = await fetch(`${BACKEND_URL}/api/plan`);
+            
+            if (!response.ok) throw new Error('Ошибка при загрузке плана');
+            
+            const data = await response.json();
+            appData.plan = data.plan;
+            appData.weekDates = data.weekDates;
+            appData.weekNumber = data.weekNumber;
+            
+            renderWeekPlan();
+        } catch (error) {
+            console.error(error);
+            tg.showAlert('Не удалось загрузить план тренировок');
+        } finally {
+            tg.MainButton.hideProgress();
+        }
+    }
+
+    async function savePlan() {
+        try {
+            tg.MainButton.showProgress();
+            const response = await fetch(`${BACKEND_URL}/api/plan`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ plan: appData.plan })
+            });
+            
+            if (!response.ok) throw new Error('Ошибка при сохранении плана');
+            
+            const result = await response.json();
+            tg.HapticFeedback.notificationOccurred('success');
+        } catch (error) {
+            console.error(error);
+            tg.showAlert('Не удалось сохранить план');
+            tg.HapticFeedback.notificationOccurred('error');
+        } finally {
+            tg.MainButton.hideProgress();
         }
     }
 
@@ -298,7 +607,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const form = document.getElementById('add-exercise-form');
         const notificationSettings = document.getElementById('notification-settings');
         
-        // Анимация переключения
         form.style.opacity = '0';
         notificationSettings.style.opacity = '0';
         
@@ -347,62 +655,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Работа с API
-    async function loadPlan() {
-        try {
-            tg.MainButton.showProgress();
-            const response = await fetch('/api/plan', {
-                method: 'GET',
-                headers: {
-                    'Authorization': `tma ${tg.initData}`
-                }
-            });
-            
-            if (!response.ok) throw new Error('Ошибка при загрузке плана');
-            
-            const data = await response.json();
-            appData.plan = data.plan;
-            appData.weekDates = data.weekDates;
-            appData.weekNumber = data.weekNumber;
-            
-            renderWeekPlan();
-        } catch (error) {
-            console.error(error);
-            tg.showAlert('Не удалось загрузить план тренировок');
-        } finally {
-            tg.MainButton.hideProgress();
-        }
-    }
-
-    async function savePlan() {
-        try {
-            tg.MainButton.showProgress();
-            const response = await fetch('/api/plan', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `tma ${tg.initData}`
-                },
-                body: JSON.stringify({ plan: appData.plan })
-            });
-            
-            if (!response.ok) throw new Error('Ошибка при сохранении плана');
-            
-            const result = await response.json();
-            tg.HapticFeedback.notificationOccurred('success');
-        } catch (error) {
-            console.error(error);
-            tg.showAlert('Не удалось сохранить план');
-            tg.HapticFeedback.notificationOccurred('error');
-        } finally {
-            tg.MainButton.hideProgress();
-        }
-    }
-
-    // Обработчики событий
-    document.getElementById('modal-close-btn').addEventListener('click', closeDayModal);
-    document.getElementById('settings-close-btn').addEventListener('click', closeSettingsModal);
-
     // Сохранение настроек уведомлений
     document.getElementById('save-notification-settings').addEventListener('click', () => {
         if (currentEditingDayIndex === null) return;
@@ -423,7 +675,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tg.HapticFeedback.notificationOccurred('success');
     });
 
-    // Добавление упражнения с анимацией
+    // Добавление упражнения
     document.getElementById('add-exercise-form').addEventListener('submit', (e) => {
         e.preventDefault();
         
@@ -448,7 +700,6 @@ document.addEventListener('DOMContentLoaded', () => {
             renderWeekPlan();
             savePlan();
             
-            // Анимация успешного добавления
             const form = e.target;
             form.style.transform = 'scale(0.98)';
             setTimeout(() => {
@@ -460,7 +711,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Удаление упражнения с анимацией
+    // Удаление упражнения
     document.getElementById('exercises-list').addEventListener('click', (e) => {
         if (e.target.classList.contains('delete-btn')) {
             const exerciseIndex = parseInt(e.target.getAttribute('data-index'));
@@ -479,6 +730,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
     });
+
+    // Обработчики событий
+    document.getElementById('modal-close-btn').addEventListener('click', closeDayModal);
+    document.getElementById('settings-close-btn').addEventListener('click', closeSettingsModal);
 
     // Инициализация
     tg.MainButton.setText('💪 Сохранить и закрыть');
@@ -505,266 +760,4 @@ document.addEventListener('DOMContentLoaded', () => {
         loadPlan();
         loadStats();
     }, 24 * 60 * 60 * 1000);
-});// Добавляем в существующий script.js
-
-// Новые экраны
-const screens = {
-    // существующие...
-    'groups-screen': 'groups-screen',
-    'create-group-screen': 'create-group-screen', 
-    'group-detail-screen': 'group-detail-screen',
-    'leaderboard-screen': 'leaderboard-screen',
-    'analytics-screen': 'analytics-screen',
-    'share-screen': 'share-screen'
-};
-
-// Навигация
-document.getElementById('menu-groups-btn').addEventListener('click', () => {
-    loadUserGroups();
-    showScreen('groups-screen');
 });
-
-document.getElementById('menu-leaderboard-btn').addEventListener('click', () => {
-    loadLeaderboard();
-    showScreen('leaderboard-screen');
-});
-
-document.getElementById('menu-analytics-btn').addEventListener('click', () => {
-    loadAnalytics();
-    showScreen('analytics-screen');
-});
-
-// Функции для групповых тренировок
-async function loadUserGroups() {
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/groups/user/1`, { // user_id должен быть динамическим
-            headers: { 'Authorization': `tma ${tg.initData}` }
-        });
-        
-        if (response.ok) {
-            const data = await response.json();
-            renderGroupsList(data.groups);
-        }
-    } catch (error) {
-        console.error('Error loading groups:', error);
-        tg.showAlert('Не удалось загрузить группы');
-    }
-}
-
-function renderGroupsList(groups) {
-    const container = document.getElementById('groups-list-container');
-    container.innerHTML = '';
-    
-    if (groups.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <h3>👥 У вас пока нет групп</h3>
-                <p>Создайте первую группу и пригласите друзей!</p>
-                <button class="btn-primary" onclick="showScreen('create-group-screen')">
-                    Создать группу
-                </button>
-            </div>
-        `;
-        return;
-    }
-    
-    groups.forEach(group => {
-        const groupCard = document.createElement('div');
-        groupCard.className = 'group-card';
-        groupCard.innerHTML = `
-            <div class="group-header">
-                <h4>${group.name}</h4>
-                <span class="member-count">👥 ${group.member_count}</span>
-            </div>
-            <div class="group-description">${group.description || 'Без описания'}</div>
-            <div class="group-type">Тип: ${group.plan_type === 'week' ? 'Недельный' : 'Месячный'} план</div>
-            <button class="btn-secondary" onclick="openGroupDetail(${group.id})">
-                Открыть
-            </button>
-        `;
-        container.appendChild(groupCard);
-    });
-}
-
-// Создание группы
-document.getElementById('create-group-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const name = document.getElementById('group-name').value;
-    const description = document.getElementById('group-description').value;
-    const planType = document.getElementById('group-plan-type').value;
-    
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/groups/create`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `tma ${tg.initData}`
-            },
-            body: JSON.stringify({
-                name,
-                description,
-                plan_type: planType,
-                creator_id: 1 // Должен быть динамическим
-            })
-        });
-        
-        if (response.ok) {
-            const result = await response.json();
-            tg.showPopup({
-                title: 'Группа создана!',
-                message: `Пригласительный код: ${result.invite_code}`,
-                buttons: [{ type: 'ok' }]
-            });
-            showScreen('groups-screen');
-            loadUserGroups();
-        }
-    } catch (error) {
-        console.error('Error creating group:', error);
-        tg.showAlert('Ошибка при создании группы');
-    }
-});
-
-// Присоединение к группе
-document.getElementById('join-group-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const inviteCode = document.getElementById('invite-code').value.toUpperCase();
-    
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/groups/join`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `tma ${tg.initData}`
-            },
-            body: JSON.stringify({
-                invite_code: inviteCode,
-                user_id: 1 // Должен быть динамическим
-            })
-        });
-        
-        if (response.ok) {
-            const result = await response.json();
-            tg.showPopup({
-                title: 'Успех!',
-                message: `Вы присоединились к группе "${result.group_name}"`,
-                buttons: [{ type: 'ok' }]
-            });
-            document.getElementById('invite-code').value = '';
-            showScreen('groups-screen');
-            loadUserGroups();
-        } else {
-            const error = await response.json();
-            tg.showAlert(error.error || 'Ошибка при присоединении');
-        }
-    } catch (error) {
-        console.error('Error joining group:', error);
-        tg.showAlert('Ошибка при присоединении к группе');
-    }
-});
-
-// Функции для лидерборда
-async function loadLeaderboard() {
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/leaderboard`);
-        if (response.ok) {
-            const data = await response.json();
-            renderLeaderboard(data.leaders);
-        }
-    } catch (error) {
-        console.error('Error loading leaderboard:', error);
-    }
-}
-
-function renderLeaderboard(leaders) {
-    const container = document.getElementById('leaderboard-container');
-    container.innerHTML = '';
-    
-    leaders.forEach((leader, index) => {
-        const rank = index + 1;
-        const leaderItem = document.createElement('div');
-        leaderItem.className = 'leader-item';
-        leaderItem.innerHTML = `
-            <div class="leader-rank">${rank}</div>
-            <div class="leader-info">
-                <div class="leader-name">${leader.first_name}</div>
-                <div class="leader-stats">
-                    ${leader.total_workout_days} дней • Стрик: ${leader.current_streak}
-                </div>
-            </div>
-            <div class="leader-badge">
-                ${rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '🏅'}
-            </div>
-        `;
-        container.appendChild(leaderItem);
-    });
-}
-
-// Аналитика
-async function loadAnalytics() {
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/analytics/1`); // user_id должен быть динамическим
-        if (response.ok) {
-            const data = await response.json();
-            renderAnalytics(data);
-        }
-    } catch (error) {
-        console.error('Error loading analytics:', error);
-    }
-}
-
-function renderAnalytics(data) {
-    // Общая статистика
-    document.getElementById('total-workout-days').textContent = data.leader_stats.total_workout_days;
-    document.getElementById('current-streak').textContent = data.leader_stats.current_streak;
-    document.getElementById('longest-streak').textContent = data.leader_stats.longest_streak;
-    
-    // Топ упражнений
-    const exercisesContainer = document.getElementById('top-exercises');
-    exercisesContainer.innerHTML = data.exercise_stats.slice(0, 5).map(ex => `
-        <div class="exercise-stat">
-            <span>${ex.exercise_name}</span>
-            <span>${ex.count} раз</span>
-        </div>
-    `).join('');
-    
-    // Еженедельная активность
-    renderWeeklyChart(data.weekly_stats);
-}
-
-// Шаринг результатов
-async function shareResults() {
-    try {
-        const response = await fetch(`${BACKEND_URL}/api/share/results`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `tma ${tg.initData}`
-            },
-            body: JSON.stringify({
-                user_id: 1, // Должен быть динамическим
-                days_range: 7
-            })
-        });
-        
-        if (response.ok) {
-            const result = await response.json();
-            
-            // Показываем ссылку для шаринга
-            tg.showPopup({
-                title: 'Поделиться результатами',
-                message: `Ваша ссылка: ${result.share_code}\n\nСкопируйте и отправьте друзьям!`,
-                buttons: [{ type: 'ok' }]
-            });
-            
-            // Можно также автоматически скопировать в буфер обмена
-            if (navigator.clipboard) {
-                navigator.clipboard.writeText(result.share_code);
-            }
-        }
-    } catch (error) {
-        console.error('Error sharing results:', error);
-        tg.showAlert('Ошибка при создании ссылки');
-    }
-}
