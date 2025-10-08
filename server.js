@@ -22,11 +22,14 @@ const db = new sqlite3.Database(':memory:', (err) => {
         console.error('Error opening database:', err);
     } else {
         console.log('✅ Connected to SQLite database');
-        initDatabase();
+        initDatabase(() => {
+            console.log('✅ Database fully initialized, starting server...');
+            startServer();
+        });
     }
 });
 
-function initDatabase() {
+function initDatabase(callback) {
     // Создаем таблицы последовательно с обработкой ошибок
     const tables = [
         `CREATE TABLE IF NOT EXISTS current_week (
@@ -124,8 +127,13 @@ function initDatabase() {
                 console.log('✅ All tables created successfully');
                 // Создаем тестового пользователя после всех таблиц
                 db.run(`INSERT OR IGNORE INTO users (id, telegram_id, first_name) VALUES (1, 123456, 'Test User')`, (err) => {
-                    if (err) console.error('Error creating test user:', err);
-                    else console.log('✅ Test user created successfully');
+                    if (err) {
+                        console.error('Error creating test user:', err);
+                    } else {
+                        console.log('✅ Test user created successfully');
+                    }
+                    // Вызываем колбэк когда ВСЕ готово
+                    if (callback) callback();
                 });
             }
         });
@@ -167,6 +175,8 @@ function updateCurrentWeek() {
         (err) => {
             if (err) {
                 console.error('Error updating week:', err);
+            } else {
+                console.log('✅ Week updated successfully');
             }
         }
     );
@@ -633,24 +643,29 @@ app.get('/health', (req, res) => {
     });
 });
 
-// Запуск сервера
-app.listen(PORT, '0.0.0.0', () => {
-    console.log('🚀 TrainPlan Server Started on port', PORT);
-    
-    // Запускаем бота только если токен есть
-    if (bot && BOT_TOKEN && BOT_TOKEN !== 'YOUR_BOT_TOKEN') {
-        bot.launch().then(() => {
-            console.log('✅ Telegram Bot Started');
-        }).catch(err => {
-            console.error('❌ Bot startup error:', err.message);
-            console.log('ℹ️  Bot not started, but server continues running');
-        });
-    } else {
-        console.log('🤖 Bot not started (no valid token provided)');
-    }
-    
-    updateCurrentWeek();
-});
+// Функция запуска сервера (вызывается после инициализации БД)
+function startServer() {
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log('🚀 TrainPlan Server Started on port', PORT);
+        
+        // Обновляем неделю после полной инициализации БД
+        setTimeout(() => {
+            updateCurrentWeek();
+        }, 1000);
+        
+        // Запускаем бота только если токен есть
+        if (bot && BOT_TOKEN && BOT_TOKEN !== 'YOUR_BOT_TOKEN') {
+            bot.launch().then(() => {
+                console.log('✅ Telegram Bot Started');
+            }).catch(err => {
+                console.error('❌ Bot startup error:', err.message);
+                console.log('ℹ️  Bot not started, but server continues running');
+            });
+        } else {
+            console.log('🤖 Bot not started (no valid token provided)');
+        }
+    });
+}
 
 // Graceful shutdown
 process.once('SIGINT', () => {
