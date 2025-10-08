@@ -1,7 +1,7 @@
 {
-  "name": "trainplan-bot",
-  "version": "3.0.0",
-  "description": "Complete training planner with social features and Telegram integration",
+  "name": "trainplan-pro",
+  "version": "4.0.0",
+  "description": "Complete fitness and health management platform with social features",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -20,10 +20,12 @@
     "telegraf": "^4.16.3",
     "axios": "^1.6.0",
     "moment-timezone": "^0.5.43",
-    "chart.js": "^4.4.0"
+    "chart.js": "^4.4.0",
+    "body-parser": "^1.20.2",
+    "multer": "^1.4.5"
   },
-  "keywords": ["telegram", "training", "fitness", "social", "authentication", "notifications"],
-  "author": "TrainPlan Team",
+  "keywords": ["fitness", "health", "nutrition", "training", "social", "telegram", "analytics"],
+  "author": "TrainPlan Pro Team",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0"
